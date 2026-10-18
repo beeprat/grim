@@ -556,7 +556,8 @@ private:
 ## Linux
 
 - Built and packed on GitHub Actions (`.github/workflows/linux-appimage.yml`, repo `beeprat/grim`, private): Ubuntu
-  22.04, Qt 6.10.3 (install-qt-action), g++-12, FFmpeg 4.4 from apt, all tests with `QT_QPA_PLATFORM=offscreen`, then
+  22.04, Qt 6.10.3 (install-qt-action), g++-12, a static audio-only FFmpeg 7.1.2 built in CI and cached (mov/aac
+  demuxers, aac/alac decoders, swresample; Ubuntu's shared FFmpeg doubled the AppImage to 95 MB, now ~50 MB), all tests with `QT_QPA_PLATFORM=offscreen`, then
   linuxdeploy + its Qt plugin into `grim-x86_64.AppImage` (run artifact). Nothing Linux-specific compiles on Windows.
 - Platform splits: `audio/AacSource.h` picks `MfAudioSource` (Windows) or `FfmpegAudioSource` (libavformat/libavcodec/
   swresample, FFmpeg 4 and 5+ APIs both handled); `controllers/Mpris` (MPRIS 2 on the session bus) replaces `MediaKeys`;
@@ -568,6 +569,7 @@ private:
 - linuxdeploy-plugin-qt packs only `platforms/libqwayland.so`; the workflow copies Qt's `plugins/wayland-*` folders
   (EGL buffer, decorations, shell) and deploys their deps, or Qt Quick aborts on Wayland. Tested working on Linux Mint
   (X11) and CachyOS (Wayland), 2026-10-18.
+- MPRIS sends the cover as `mpris:artUrl`: a 512 px JPEG from `CoverCache::thumbnailFile()` in the covers cache.
 - Not done: rounded window corners on Linux (the frameless window is square there).
 
 ## Planned dependencies (not yet integrated)
