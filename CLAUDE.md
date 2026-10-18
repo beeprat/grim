@@ -553,6 +553,20 @@ private:
 - The title bar sits outside the Ctrl+wheel zoom area, so its buttons keep a fixed size.
 - MSVC: `/wd4702` on the app target only. qmlcachegen output triggers C4702 inside Qt headers.
 
+## Linux
+
+- Built and packed on GitHub Actions (`.github/workflows/linux-appimage.yml`, repo `beeprat/grim`, private): Ubuntu
+  22.04, Qt 6.10.3 (install-qt-action), g++-12, FFmpeg 4.4 from apt, all tests with `QT_QPA_PLATFORM=offscreen`, then
+  linuxdeploy + its Qt plugin into `grim-x86_64.AppImage` (run artifact). Nothing Linux-specific compiles on Windows.
+- Platform splits: `audio/AacSource.h` picks `MfAudioSource` (Windows) or `FfmpegAudioSource` (libavformat/libavcodec/
+  swresample, FFmpeg 4 and 5+ APIs both handled); `controllers/Mpris` (MPRIS 2 on the session bus) replaces `MediaKeys`;
+  `DiscordIpc` finds the Unix socket in `$XDG_RUNTIME_DIR` (plain, Flatpak or Snap folder); "Open containing folder"
+  uses D-Bus `org.freedesktop.FileManager1.ShowItems`; `TitleBar.qml` draws the window button glyphs where Segoe MDL2
+  Assets is missing; `main.cpp` loads Selawik (`resources/fonts`, SIL OFL, Segoe UI metrics) as the app font.
+- File paths for TagLib/miniaudio/FFmpeg go through `QFileInfo::filesystemFilePath()` (wchar_t on Windows, UTF-8 on
+  Linux), never `toStdWString()`.
+- Not done: rounded window corners on Linux (the frameless window is square there).
+
 ## Planned dependencies (not yet integrated)
 
 libebur128 (ReplayGain scan). Add it with `find_package` / `FetchContent` when its feature lands.
