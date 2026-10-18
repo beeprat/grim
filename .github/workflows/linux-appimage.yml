@@ -59,7 +59,13 @@ jobs:
           chmod +x linuxdeploy*.AppImage
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --executable AppDir/usr/bin/GRIM \
             --desktop-file resources/linux/grim.desktop --icon-file resources/linux/grim.svg \
-            --plugin qt --output appimage
+            --plugin qt
+          # The Qt plugin packs only the Wayland platform plugin, not the buffer (EGL), decoration and shell
+          # plugins it loads; without them Qt Quick aborts on Wayland desktops ("wayland-egl" not found).
+          for dir in "$QT_ROOT_DIR"/plugins/wayland-*; do cp -r "$dir" AppDir/usr/plugins/; done
+          ls -R AppDir/usr/plugins | grep -q wayland-egl || { echo "wayland-egl plugin missing"; exit 1; }
+          deps=(); for f in AppDir/usr/plugins/wayland-*/*.so; do deps+=(--deploy-deps-only "$f"); done
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir "${deps[@]}" --output appimage
 
       - uses: actions/upload-artifact@v4
         with:
