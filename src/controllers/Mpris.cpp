@@ -85,6 +85,7 @@ class PlayerAdaptor : public QDBusAbstractAdaptor
 public:
     explicit PlayerAdaptor(Mpris *owner)
         : QDBusAbstractAdaptor(owner)
+        , m_owner(owner)
         , m_player(owner->player())
     {
         connect(&m_player, &PlayerController::playingChanged, this,
@@ -106,6 +107,8 @@ public:
     }
     QVariantMap metadata() const
     {
+        // shortcut: the cover is resized on the GUI thread when the track changes (cached on disk after the first
+        // time); move it to a worker if large embedded covers ever stall the track switch.
         if (!m_player.hasTrack())
             return {};
         QVariantMap map{
@@ -117,6 +120,8 @@ public:
         };
         if (!m_player.artist().isEmpty())
             map.insert(u"xesam:artist"_s, QStringList{m_player.artist()});
+        if (const QString art = m_owner->artUrl(); !art.isEmpty())
+            map.insert(u"mpris:artUrl"_s, art);
         return map;
     }
     qlonglong position() const { return m_player.positionMs() * 1000; }
@@ -167,14 +172,16 @@ private:
         QDBusConnection::sessionBus().send(signal);
     }
 
+    Mpris *m_owner;
     PlayerController &m_player;
 };
 
 } // namespace
 
-Mpris::Mpris(PlayerController &player, QObject *parent)
+Mpris::Mpris(PlayerController &player, const QString &coverCacheDir, QObject *parent)
     : QObject(parent)
     , m_player(player)
+    , m_covers(coverCacheDir, 4LL * 1024 * 1024)
 {
     new RootAdaptor(this);
     new PlayerAdaptor(this);
@@ -186,6 +193,13 @@ Mpris::Mpris(PlayerController &player, QObject *parent)
 Mpris::~Mpris()
 {
     QDBusConnection::sessionBus().unregisterService(kService);
+}
+
+QString Mpris::artUrl()
+{
+    // 512 px like the Discord cover: sharp in lock screens and media popups, small enough to load fast.
+    const QString file = m_covers.thumbnailFile(m_player.url().toLocalFile(), QSize(512, 512));
+    return file.isEmpty() ? QString() : QUrl::fromLocalFile(file).toString();
 }
 
 void Mpris::setWindow(QWindow *window)

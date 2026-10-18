@@ -20,9 +20,14 @@ public:
     // The cover of audioPath scaled to cover `size` (aspect kept, may exceed it in one
     // dimension). An invalid size returns the full image. Null if the file has no cover.
     QImage load(const QString &audioPath, const QSize &size);
+    // The JPEG thumbnail of load(audioPath, size) on disk (written if needed), for programs that want a
+    // cover as a file (MPRIS art). Empty if there is no cover, no disk cache or `size` is invalid.
+    QString thumbnailFile(const QString &audioPath, const QSize &size);
 
 private:
     QImage decode(const QString &audioPath, const QSize &size) const;
+    static QString keyFor(const QString &audioPath, const QSize &size);
+    QString diskFile(const QString &key, const QString &extension) const;
 
     QString m_directory;
     QMutex m_mutex;

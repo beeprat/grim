@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/CoverCache.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QWindow>
@@ -14,7 +16,8 @@ class Mpris : public QObject
     Q_OBJECT
 
 public:
-    explicit Mpris(PlayerController &player, QObject *parent = nullptr);
+    // coverCacheDir: where cover thumbnails are kept (shared with the other cover caches).
+    Mpris(PlayerController &player, const QString &coverCacheDir, QObject *parent = nullptr);
     ~Mpris() override;
 
     // The window "Raise" brings to the front.
@@ -22,8 +25,11 @@ public:
 
     PlayerController &player() const { return m_player; }
     QWindow *window() const { return m_window; }
+    // file:// URL of the current track's cover as a JPEG, or empty.
+    QString artUrl();
 
 private:
     PlayerController &m_player;
     QPointer<QWindow> m_window;
+    CoverCache m_covers;
 };

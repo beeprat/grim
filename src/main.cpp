@@ -107,7 +107,8 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_WIN
     MediaKeys mediaKeys(playerController);
 #else
-    Mpris mpris(playerController);
+    Mpris mpris(playerController,
+                QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/covers"));
 #endif
     // Plays not yet accepted by Last.fm survive restarts in this file.
     LastFmController lastFm(dataDir + QStringLiteral("/scrobble-queue.json"), dataDir + QStringLiteral("/lastfm.txt"));

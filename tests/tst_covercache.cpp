@@ -87,6 +87,23 @@ private slots:
         QCOMPARE(fileCount(cacheDir), 1);
     }
 
+    void givesThumbnailAsFile()
+    {
+        QTemporaryDir dir;
+        const QString song = dir.filePath(u"song.wav"_s);
+        const QString bare = dir.filePath(u"bare.wav"_s);
+        QVERIFY(writeSilentWav(song));
+        QVERIFY(writeSilentWav(bare));
+        QVERIFY(embedCover(song, Qt::red));
+        CoverCache cache(dir.filePath(u"covers"_s));
+
+        const QString file = cache.thumbnailFile(song, QSize(64, 64));
+        QVERIFY(file.endsWith(u".jpg"_s));
+        QCOMPARE(QImage(file).height(), 64);
+        QVERIFY(cache.thumbnailFile(bare, QSize(64, 64)).isEmpty()); // no cover
+        QVERIFY(cache.thumbnailFile(song, QSize()).isEmpty());       // full size is never written
+    }
+
     void retaggedFileGetsNewThumbnail()
     {
         QTemporaryDir dir;

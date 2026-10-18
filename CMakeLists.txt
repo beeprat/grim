@@ -12,7 +12,9 @@ if(NOT WIN32)
     # Linux: MPRIS / file manager over D-Bus, AAC/M4A decoding with FFmpeg's libraries.
     find_package(Qt6 REQUIRED COMPONENTS DBus)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswresample)
+    # Order matters for the static FFmpeg CI builds: each library before the ones it uses.
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libswresample libavutil)
+    find_package(Threads REQUIRED)
 endif()
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -142,7 +144,7 @@ if(WIN32)
     target_link_libraries(musicplayer_core PRIVATE mfplat mfreadwrite mfuuid)
 else()
     target_sources(musicplayer_core PRIVATE src/audio/FfmpegAudioSource.h src/audio/FfmpegAudioSource.cpp)
-    target_link_libraries(musicplayer_core PRIVATE PkgConfig::FFMPEG)
+    target_link_libraries(musicplayer_core PRIVATE PkgConfig::FFMPEG Threads::Threads m)
 endif()
 
 qt_add_executable(MusicPlayer WIN32

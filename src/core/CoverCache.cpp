@@ -34,23 +34,43 @@ QImage CoverCache::decode(const QString &audioPath, const QSize &size) const
     return reader.read();
 }
 
-QImage CoverCache::load(const QString &audioPath, const QSize &size)
+QString CoverCache::keyFor(const QString &audioPath, const QSize &size)
 {
     const QFileInfo info(audioPath);
-    const QString key = u"%1|%2|%3x%4"_s.arg(info.absoluteFilePath().toLower())
-                            .arg(info.lastModified().toMSecsSinceEpoch())
-                            .arg(size.width())
-                            .arg(size.height());
+    return u"%1|%2|%3x%4"_s.arg(info.absoluteFilePath().toLower())
+        .arg(info.lastModified().toMSecsSinceEpoch())
+        .arg(size.width())
+        .arg(size.height());
+}
+
+// Disk: "<hash>.jpg" holds the thumbnail; an empty "<hash>.none" remembers "no cover".
+QString CoverCache::diskFile(const QString &key, const QString &extension) const
+{
+    if (m_directory.isEmpty())
+        return {};
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex());
+    return QDir(m_directory).filePath(hash + extension);
+}
+
+QString CoverCache::thumbnailFile(const QString &audioPath, const QSize &size)
+{
+    if (!size.isValid() || load(audioPath, size).isNull())
+        return {};
+    const QString thumbnail = diskFile(keyFor(audioPath, size), u".jpg"_s);
+    return QFileInfo::exists(thumbnail) ? thumbnail : QString();
+}
+
+QImage CoverCache::load(const QString &audioPath, const QSize &size)
+{
+    const QString key = keyFor(audioPath, size);
     {
         const QMutexLocker lock(&m_mutex);
         if (const QImage *cached = m_memory.object(key))
             return *cached;
     }
 
-    // Disk: "<hash>.jpg" holds the thumbnail; an empty "<hash>.none" remembers "no cover".
-    const QString hash = QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex());
-    const QString thumbnail = m_directory.isEmpty() ? QString() : QDir(m_directory).filePath(hash + u".jpg"_s);
-    const QString noCover = m_directory.isEmpty() ? QString() : QDir(m_directory).filePath(hash + u".none"_s);
+    const QString thumbnail = diskFile(key, u".jpg"_s);
+    const QString noCover = diskFile(key, u".none"_s);
 
     QImage image;
     if (!thumbnail.isEmpty() && QFileInfo::exists(thumbnail)) {
