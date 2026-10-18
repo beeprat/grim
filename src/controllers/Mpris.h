@@ -2,9 +2,9 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QWindow>
 
 class PlayerController;
-class QWindow;
 
 // Linux counterpart of MediaKeys: publishes the player on the session bus as an MPRIS 2 player
 // (org.mpris.MediaPlayer2.grim). Desktops route the keyboard media keys to it and show it in their
