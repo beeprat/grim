@@ -565,6 +565,9 @@ private:
   Assets is missing; `main.cpp` loads Selawik (`resources/fonts`, SIL OFL, Segoe UI metrics) as the app font.
 - File paths for TagLib/miniaudio/FFmpeg go through `QFileInfo::filesystemFilePath()` (wchar_t on Windows, UTF-8 on
   Linux), never `toStdWString()`.
+- linuxdeploy-plugin-qt packs only `platforms/libqwayland.so`; the workflow copies Qt's `plugins/wayland-*` folders
+  (EGL buffer, decorations, shell) and deploys their deps, or Qt Quick aborts on Wayland. Tested working on Linux Mint
+  (X11) and CachyOS (Wayland), 2026-10-18.
 - Not done: rounded window corners on Linux (the frameless window is square there).
 
 ## Planned dependencies (not yet integrated)
