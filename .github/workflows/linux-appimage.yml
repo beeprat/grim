@@ -34,7 +34,7 @@ jobs:
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_INSTALL_PREFIX=/usr
-          cmake --build build
+          cmake --build build -- -k 0
 
       - name: Test
         env:

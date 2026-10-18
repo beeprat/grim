@@ -186,7 +186,11 @@ std::unique_ptr<FfmpegAudioSource> FfmpegAudioSource::open(const std::filesystem
     if (avformat_open_input(&state->format, file.c_str(), nullptr, nullptr) < 0
         || avformat_find_stream_info(state->format, nullptr) < 0)
         return nullptr;
+#if LIBAVFORMAT_VERSION_MAJOR >= 59
     const AVCodec *decoder = nullptr;
+#else
+    AVCodec *decoder = nullptr; // FFmpeg 4 (Ubuntu 22.04) takes a non-const pointer here
+#endif
     state->stream = av_find_best_stream(state->format, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
     if (state->stream < 0 || !decoder)
         return nullptr;
