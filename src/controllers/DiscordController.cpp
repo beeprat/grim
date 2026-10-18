@@ -21,6 +21,11 @@ namespace {
 const auto kEnabledKey = "discord/enabled"_L1;
 const auto kApplicationIdKey = "discord/applicationId"_L1;
 const auto kImgurKey = "discord/imgurClientId"_L1;
+// grim.'s own Discord application ("Listening to ..." shows under its name) and imgur client, used when the key
+// file leaves them empty. Neither is a secret: Discord shows the application ID to everyone, and an imgur Client-ID
+// only identifies the app (anonymous uploads, shared rate limit of every grim. user).
+const auto kDefaultApplicationId = "1561034327909732412"_L1;
+const auto kDefaultImgurClientId = "546c25a59c58ad7"_L1;
 constexpr int kCoverSize = 512;
 // Discord allows about 5 presence updates per 20 s; this collapses bursts (skipping, seeking).
 constexpr int kDebounceMs = 1500;
@@ -60,15 +65,17 @@ DiscordController::DiscordController(PlayerController &player, const QString &co
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             file.write(QStringLiteral("# Discord Rich Presence for grim. Edit, save, then turn presence off and on in Settings.\n"
                                       "#\n"
+                                      "# Both are grim.'s own by default. To use yours instead:\n"
                                       "# application_id: create an application at discord.com/developers/applications\n"
                                       "#   (its name is what Discord shows) and copy its Application ID.\n"
-                                      "# imgur_client_id: optional, for album covers. Register an app (anonymous usage)\n"
+                                      "# imgur_client_id: for album covers. Register an app (anonymous usage)\n"
                                       "#   at api.imgur.com/oauth2/addclient. Covers are uploaded anonymously;\n"
                                       "#   anyone with the link can see them.\n"
                                       "\n"
                                       "application_id = %1\n"
                                       "imgur_client_id = %2\n")
-                           .arg(stored.value(kApplicationIdKey).toString(), stored.value(kImgurKey).toString())
+                           .arg(stored.value(kApplicationIdKey, kDefaultApplicationId).toString(),
+                                stored.value(kImgurKey, kDefaultImgurClientId).toString())
                            .toUtf8());
             if (file.commit()) {
                 stored.remove(kApplicationIdKey);
@@ -136,8 +143,13 @@ QString DiscordController::keysFile() const
 void DiscordController::loadKeys()
 {
     const QHash<QString, QString> keys = KeyFile::read(m_keysFile);
+    // An empty value (e.g. a file written by a version without defaults) means grim.'s own.
     m_applicationId = keys.value(QStringLiteral("application_id"));
+    if (m_applicationId.isEmpty())
+        m_applicationId = kDefaultApplicationId;
     m_imgurClientId = keys.value(QStringLiteral("imgur_client_id"));
+    if (m_imgurClientId.isEmpty())
+        m_imgurClientId = kDefaultImgurClientId;
     m_imgur->setClientId(m_imgurClientId);
 }
 

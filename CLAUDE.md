@@ -386,7 +386,8 @@ private:
   the READY dispatch, then `SET_ACTIVITY` (op 1, `args.pid`, no `activity` key = clear). Answers pings,
   retries every 15 s while Discord is closed, resends the last activity after a reconnect.
 - `controllers/DiscordController` (Settings → Discord: only the on/off switch, `discord/enabled` in QSettings,
-  off by default, plus an error line). The user's own Discord application ID (its name is the app name on
+  off by default, plus an error line). Defaults: grim.'s own application ID and imgur Client-ID
+  (`kDefaultApplicationId`/`kDefaultImgurClientId`, used for new files and for empty values). The user's own Discord application ID (its name is the app name on
   Discord) and imgur Client-ID are in `%APPDATA%/grimPlayer/grimPlayer/discord.txt` (`application_id = ...`,
   `imgur_client_id = ...`, `#` comments; `core/KeyFile`), created on first start from the old `discord/*`
   registry values and re-read each time presence is turned on.
