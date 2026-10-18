@@ -1,5 +1,5 @@
 #include "audio/AudioEngine.h"
-#include "audio/MfAudioSource.h"
+#include "audio/AacSource.h"
 #include "audio/PitchShifter.h"
 #include "audio/Reverb.h"
 
@@ -18,7 +18,7 @@ struct Slot
     ma_sound sound{};
     bool loaded = false;
     // Set for formats miniaudio cannot decode (AAC/M4A); must outlive `sound`.
-    std::unique_ptr<MfAudioSource> mfSource;
+    std::unique_ptr<AacSource> mfSource;
 
     void unload()
     {
@@ -109,21 +109,25 @@ struct AudioEngine::Impl
     }
 
     // Opens `file` into `slot` (paused at 0). WAV/FLAC/MP3 stream through miniaudio,
-    // AAC/M4A through Media Foundation.
+    // AAC/M4A through AacSource (Media Foundation / FFmpeg).
     bool open(Slot &slot, const std::filesystem::path &file)
     {
         // NO_SPATIALIZATION: plain stereo playback, no 3D panning/attenuation.
         ma_result result = MA_ERROR;
-        if (MfAudioSource::handles(file)) {
-            slot.mfSource = MfAudioSource::open(file);
+        if (AacSource::handles(file)) {
+            slot.mfSource = AacSource::open(file);
             if (slot.mfSource)
                 result = ma_sound_init_from_data_source(&engine, slot.mfSource->dataSource(),
                                                         MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr, &slot.sound);
         } else {
             // STREAM: decode incrementally on the resource manager thread instead of loading the whole file.
             constexpr ma_uint32 kFlags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION;
-            // Wide-char path: Windows-only app, and it keeps non-ASCII file names working.
+#ifdef _WIN32
+            // Wide-char path keeps non-ASCII file names working on Windows (UTF-8 bytes on Linux).
             result = ma_sound_init_from_file_w(&engine, file.c_str(), kFlags, nullptr, nullptr, &slot.sound);
+#else
+            result = ma_sound_init_from_file(&engine, file.c_str(), kFlags, nullptr, nullptr, &slot.sound);
+#endif
         }
         if (result != MA_SUCCESS) {
             std::fprintf(stderr, "AudioEngine: cannot load '%s': %s\n", file.string().c_str(),

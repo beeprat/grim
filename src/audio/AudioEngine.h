@@ -5,7 +5,7 @@
 #include <memory>
 
 // Plays one track at a time on the default output device (miniaudio, WASAPI).
-// WAV/FLAC/MP3 decode in miniaudio; M4A/AAC through Media Foundation (MfAudioSource).
+// WAV/FLAC/MP3 decode in miniaudio; M4A/AAC through AacSource (Media Foundation on Windows, FFmpeg on Linux).
 // Call every method from one thread (the GUI thread). miniaudio decodes on its
 // own job thread and mixes on the device thread; the calls used here are safe
 // against both.

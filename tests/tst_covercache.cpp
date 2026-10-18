@@ -2,6 +2,7 @@
 
 #include <fileref.h>
 
+#include <QFileInfo>
 #include <QBuffer>
 #include <QDataStream>
 #include <QDir>
@@ -40,7 +41,7 @@ bool embedCover(const QString &audioPath, const QColor &color)
     buffer.open(QIODevice::WriteOnly);
     image.save(&buffer, "PNG");
 
-    const std::wstring path = QDir::toNativeSeparators(audioPath).toStdWString();
+    const std::filesystem::path path = QFileInfo(audioPath).filesystemFilePath();
     TagLib::FileRef file(path.c_str());
     TagLib::VariantMap picture;
     picture.insert("data", TagLib::ByteVector(png.constData(), static_cast<unsigned int>(png.size())));

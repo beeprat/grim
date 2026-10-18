@@ -3,6 +3,7 @@
 #include <fileref.h>
 #include <tpropertymap.h>
 
+#include <QFileInfo>
 #include <QDataStream>
 #include <QDir>
 #include <QFile>
@@ -99,7 +100,7 @@ private slots:
         QCOMPARE(Lyrics::read(song), u"[00:01.00]från sidecar"_s);
 
         {
-            const std::wstring path = QDir::toNativeSeparators(song).toStdWString();
+            const std::filesystem::path path = QFileInfo(song).filesystemFilePath();
             TagLib::FileRef file(path.c_str());
             TagLib::PropertyMap tags = file.properties();
             tags.insert("LYRICS", TagLib::String("[00:02.00]from the tag"));

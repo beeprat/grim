@@ -3,6 +3,7 @@
 #include <fileref.h>
 #include <tag.h>
 
+#include <QFileInfo>
 #include <QDataStream>
 #include <QFile>
 #include <QTemporaryDir>
@@ -53,7 +54,7 @@ private slots:
         const QString path = dir.filePath(u"tagged ä.wav"_s);
         QVERIFY(writeSilentWav(path));
         {
-            TagLib::FileRef file(path.toStdWString().c_str());
+            TagLib::FileRef file(QFileInfo(path).filesystemFilePath().c_str());
             QVERIFY(!file.isNull());
             file.tag()->setTitle(TagLib::String(u"Hoppípolla"_s.toStdWString()));
             file.tag()->setArtist(TagLib::String(u"Sigur Rós"_s.toStdWString()));
@@ -103,7 +104,7 @@ private slots:
 
         // Embedded picture wins over the folder image.
         {
-            TagLib::FileRef file(path.toStdWString().c_str());
+            TagLib::FileRef file(QFileInfo(path).filesystemFilePath().c_str());
             TagLib::VariantMap picture;
             picture.insert("data", TagLib::ByteVector("embedded-png", 12));
             picture.insert("mimeType", TagLib::String("image/png"));
@@ -120,7 +121,7 @@ private slots:
         const QString path = dir.filePath(u"disc.wav"_s);
         QVERIFY(writeSilentWav(path));
         {
-            TagLib::FileRef file(path.toStdWString().c_str());
+            TagLib::FileRef file(QFileInfo(path).filesystemFilePath().c_str());
             TagLib::PropertyMap tags = file.properties();
             tags.insert("DISCNUMBER", TagLib::String("2/3"));
             file.setProperties(tags);

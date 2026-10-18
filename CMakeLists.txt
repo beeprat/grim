@@ -8,6 +8,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Quick Sql Network Concurrent Widgets Test)
+if(NOT WIN32)
+    # Linux: MPRIS / file manager over D-Bus, AAC/M4A decoding with FFmpeg's libraries.
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswresample)
+endif()
 qt_standard_project_setup(REQUIRES 6.8)
 
 # Strict warnings for our own targets only; third-party code keeps its defaults.
@@ -117,8 +123,7 @@ add_library(musicplayer_core STATIC
     src/core/ImgurUploader.cpp
     src/audio/AudioEngine.h
     src/audio/AudioEngine.cpp
-    src/audio/MfAudioSource.h
-    src/audio/MfAudioSource.cpp
+    src/audio/AacSource.h
     src/audio/Reverb.h
     src/audio/Reverb.cpp
     src/audio/PitchShifter.h
@@ -129,20 +134,38 @@ target_include_directories(musicplayer_core PUBLIC src)
 target_compile_definitions(musicplayer_core PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(musicplayer_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
-    PUBLIC miniaudio # MfAudioSource.h exposes ma_data_source
-    PRIVATE tag soundtouch musicplayer_warnings
-            mfplat mfreadwrite mfuuid) # Media Foundation: AAC/M4A decoding
+    PUBLIC miniaudio # AacSource.h exposes ma_data_source
+    PRIVATE tag soundtouch musicplayer_warnings)
+# AAC/M4A decoding: Media Foundation on Windows, FFmpeg elsewhere (picked in AacSource.h).
+if(WIN32)
+    target_sources(musicplayer_core PRIVATE src/audio/MfAudioSource.h src/audio/MfAudioSource.cpp)
+    target_link_libraries(musicplayer_core PRIVATE mfplat mfreadwrite mfuuid)
+else()
+    target_sources(musicplayer_core PRIVATE src/audio/FfmpegAudioSource.h src/audio/FfmpegAudioSource.cpp)
+    target_link_libraries(musicplayer_core PRIVATE PkgConfig::FFMPEG)
+endif()
 
 qt_add_executable(MusicPlayer WIN32
     src/main.cpp
-    resources/app.rc # exe icon (resources/app.ico, made by resources/make_icon.ps1)
     src/controllers/TrayController.h
     src/controllers/TrayController.cpp
-    src/controllers/MediaKeys.h
-    src/controllers/MediaKeys.cpp
     src/providers/CoverImageProvider.h
     src/providers/CoverImageProvider.cpp
 )
+if(WIN32)
+    target_sources(MusicPlayer PRIVATE
+        resources/app.rc # exe icon (resources/app.ico, made by resources/make_icon.ps1)
+        src/controllers/MediaKeys.h
+        src/controllers/MediaKeys.cpp)
+else()
+    # Media keys and desktop playback controls (MPRIS); Selawik stands in for Segoe UI (see main.cpp).
+    target_sources(MusicPlayer PRIVATE src/controllers/Mpris.h src/controllers/Mpris.cpp)
+    qt_add_resources(MusicPlayer "fonts"
+        PREFIX "/fonts"
+        BASE resources/fonts
+        FILES resources/fonts/selawk.ttf resources/fonts/selawksl.ttf resources/fonts/selawkl.ttf
+              resources/fonts/selawksb.ttf resources/fonts/selawkb.ttf)
+endif()
 
 # Theme.qml is a QML singleton (pragma Singleton); qmldir needs to know.
 set_source_files_properties(qml/Theme.qml qml/Effects.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -245,7 +268,13 @@ qt_add_qml_module(MusicPlayer
         qml/icons/volume_off.svg
 )
 
-target_link_libraries(MusicPlayer PRIVATE musicplayer_core Qt6::Quick Qt6::Concurrent Qt6::Widgets dwmapi musicplayer_warnings)
+target_link_libraries(MusicPlayer PRIVATE musicplayer_core Qt6::Quick Qt6::Concurrent Qt6::Widgets musicplayer_warnings)
+if(WIN32)
+    target_link_libraries(MusicPlayer PRIVATE dwmapi)
+else()
+    target_link_libraries(MusicPlayer PRIVATE Qt6::DBus)
+    install(TARGETS MusicPlayer RUNTIME DESTINATION bin)
+endif()
 
 # Every qsTr/tr text, collected at build time, embedded as :/ui_strings.txt. Settings writes it
 # out as a translation template. Regenerated whenever a QML or C++ source changes.
@@ -391,10 +420,10 @@ set_tests_properties(tst_libraryfiles PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 # Needs ffmpeg on PATH to build its .m4a fixture; skips otherwise.
-qt_add_executable(tst_mfaudiosource tests/tst_mfaudiosource.cpp)
-target_link_libraries(tst_mfaudiosource PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
-add_test(NAME tst_mfaudiosource COMMAND tst_mfaudiosource)
-set_tests_properties(tst_mfaudiosource PROPERTIES
+qt_add_executable(tst_aacsource tests/tst_aacsource.cpp)
+target_link_libraries(tst_aacsource PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_aacsource COMMAND tst_aacsource)
+set_tests_properties(tst_aacsource PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 # Needs ffmpeg on PATH; skips otherwise.

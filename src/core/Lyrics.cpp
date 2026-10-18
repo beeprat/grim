@@ -17,7 +17,7 @@ namespace Lyrics {
 
 QString read(const QString &audioPath)
 {
-    const std::wstring path = QDir::toNativeSeparators(audioPath).toStdWString();
+    const std::filesystem::path path = QFileInfo(audioPath).filesystemFilePath();
     const TagLib::FileRef file(path.c_str(), false);
     if (!file.isNull()) {
         const TagLib::PropertyMap tags = file.properties();

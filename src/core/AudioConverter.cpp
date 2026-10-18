@@ -22,8 +22,8 @@ constexpr int kMaxSampleRate = 48'000;
 // Copies every tag (including freeform ones like REPLAYGAIN_*) and embedded pictures.
 bool copyTags(const QString &sourcePath, const QString &targetPath)
 {
-    const std::wstring source = QDir::toNativeSeparators(sourcePath).toStdWString();
-    const std::wstring target = QDir::toNativeSeparators(targetPath).toStdWString();
+    const std::filesystem::path source = QFileInfo(sourcePath).filesystemFilePath();
+    const std::filesystem::path target = QFileInfo(targetPath).filesystemFilePath();
     const TagLib::FileRef from(source.c_str(), false);
     TagLib::FileRef to(target.c_str(), false);
     if (from.isNull() || to.isNull())
@@ -38,7 +38,7 @@ bool copyTags(const QString &sourcePath, const QString &targetPath)
 
 int sampleRateOf(const QString &path)
 {
-    const std::wstring native = QDir::toNativeSeparators(path).toStdWString();
+    const std::filesystem::path native = QFileInfo(path).filesystemFilePath();
     const TagLib::FileRef file(native.c_str(), true, TagLib::AudioProperties::Fast);
     return !file.isNull() && file.audioProperties() ? file.audioProperties()->sampleRate() : 0;
 }

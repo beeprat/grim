@@ -1,6 +1,7 @@
-#include "audio/MfAudioSource.h"
+#include "audio/AacSource.h"
 #include "core/AudioConverter.h"
 
+#include <QFileInfo>
 #include <QDataStream>
 #include <QDir>
 #include <QFile>
@@ -44,7 +45,7 @@ bool writeWav(const QString &path)
 
 } // namespace
 
-class TestMfAudioSource : public QObject
+class TestAacSource : public QObject
 {
     Q_OBJECT
 
@@ -64,9 +65,9 @@ private slots:
         QVERIFY(finished.first().at(2).toBool());
         const QString m4a = finished.first().at(1).toString();
 
-        const std::filesystem::path path = QDir::toNativeSeparators(m4a).toStdWString();
-        QVERIFY(MfAudioSource::handles(path));
-        const auto source = MfAudioSource::open(path);
+        const std::filesystem::path path = QFileInfo(m4a).filesystemFilePath();
+        QVERIFY(AacSource::handles(path));
+        const auto source = AacSource::open(path);
         QVERIFY(source);
 
         ma_format format;
@@ -116,11 +117,11 @@ private slots:
 
     void rejectsMissingFile()
     {
-        QVERIFY(!MfAudioSource::open(L"C:\\does\\not\\exist.m4a"));
-        QVERIFY(!MfAudioSource::handles(L"song.flac"));
-        QVERIFY(MfAudioSource::handles(L"SONG.M4A"));
+        QVERIFY(!AacSource::open("/does/not/exist.m4a"));
+        QVERIFY(!AacSource::handles("song.flac"));
+        QVERIFY(AacSource::handles("SONG.M4A"));
     }
 };
 
-QTEST_GUILESS_MAIN(TestMfAudioSource)
-#include "tst_mfaudiosource.moc"
+QTEST_GUILESS_MAIN(TestAacSource)
+#include "tst_aacsource.moc"

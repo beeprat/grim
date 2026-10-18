@@ -1,5 +1,6 @@
 #include "audio/AudioEngine.h"
 
+#include <QFileInfo>
 #include <QDataStream>
 #include <QFile>
 #include <QTemporaryDir>
@@ -52,12 +53,12 @@ private slots:
         QVERIFY(writeSilentWav(first));
         QVERIFY(writeSilentWav(second));
 
-        QVERIFY(engine.load(first.toStdWString()));
+        QVERIFY(engine.load(QFileInfo(first).filesystemFilePath()));
         engine.play();
         QTRY_VERIFY(engine.positionMs() > 100);
 
         // The new track starts at 0 while the old one fades out for 300 ms.
-        QVERIFY(engine.load(second.toStdWString(), 300));
+        QVERIFY(engine.load(QFileInfo(second).filesystemFilePath(), 300));
         engine.play();
         QVERIFY(engine.isPlaying());
         QVERIFY(engine.positionMs() < 100);
@@ -71,7 +72,7 @@ private slots:
 
         // A crossfade load when nothing plays is a plain load.
         engine.pause();
-        QVERIFY(engine.load(first.toStdWString(), 300));
+        QVERIFY(engine.load(QFileInfo(first).filesystemFilePath(), 300));
         QVERIFY(!engine.isPlaying());
         QCOMPARE(engine.positionMs(), 0);
     }
@@ -89,18 +90,18 @@ private slots:
         QVERIFY(writeSilentWav(second));
 
         // Nothing is queued while paused.
-        QVERIFY(engine.load(first.toStdWString()));
-        QVERIFY(!engine.queueNext(second.toStdWString()));
+        QVERIFY(engine.load(QFileInfo(first).filesystemFilePath()));
+        QVERIFY(!engine.queueNext(QFileInfo(second).filesystemFilePath()));
 
         engine.play();
         QTRY_VERIFY(engine.positionMs() > 100);
-        QVERIFY(engine.queueNext(second.toStdWString()));
+        QVERIFY(engine.queueNext(QFileInfo(second).filesystemFilePath()));
         QVERIFY(engine.hasQueued());
 
         // A seek drops the queued track (it was timed for the old position); queue again.
         engine.seek(1500);
         QVERIFY(!engine.hasQueued());
-        QVERIFY(engine.queueNext(second.toStdWString()));
+        QVERIFY(engine.queueNext(QFileInfo(second).filesystemFilePath()));
 
         // When the first track ends, the second one is already playing from its start.
         QTRY_VERIFY_WITH_TIMEOUT(engine.atEnd(), 3000);

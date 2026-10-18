@@ -19,7 +19,7 @@ public:
     explicit DiscordIpc(QObject *parent = nullptr);
     ~DiscordIpc() override;
 
-    // For tests; defaults to "discord-ipc-" (pipes 0..9 are tried).
+    // For tests; by default the desktop client's pipe (Windows) or socket (Linux) is found (0..9 are tried).
     void setPipeBaseName(const QString &baseName);
 
     void start(const QString &clientId);

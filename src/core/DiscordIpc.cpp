@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QJsonDocument>
+#include <QDir>
 #include <QLocalSocket>
 #include <QTimer>
 #include <QtEndian>
@@ -13,13 +14,31 @@ namespace {
 constexpr int kPipeCount = 10;
 constexpr int kRetryMs = 15000; // Discord not running: look again later
 
+// Where the desktop client listens. Windows: named pipes (Qt adds the \\.\pipe\ prefix). Linux: a Unix
+// socket in $XDG_RUNTIME_DIR, or in its Flatpak/Snap subfolder; the folder holding a socket right now wins.
+QString defaultPipeBaseName()
+{
+#ifdef Q_OS_WIN
+    return u"discord-ipc-"_s;
+#else
+    QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    if (runtime.isEmpty())
+        runtime = u"/tmp"_s;
+    const QStringList folders{runtime, runtime + u"/app/com.discordapp.Discord"_s, runtime + u"/snap.discord"_s};
+    for (const QString &folder : folders) {
+        if (!QDir(folder).entryList({u"discord-ipc-*"_s}, QDir::System | QDir::Files).isEmpty())
+            return folder + u"/discord-ipc-"_s;
+    }
+    return folders.first() + u"/discord-ipc-"_s;
+#endif
+}
+
 } // namespace
 
 DiscordIpc::DiscordIpc(QObject *parent)
     : QObject(parent)
     , m_socket(new QLocalSocket(this))
     , m_retry(new QTimer(this))
-    , m_baseName(u"discord-ipc-"_s)
 {
     m_retry->setSingleShot(true);
     m_retry->setInterval(kRetryMs);
@@ -87,8 +106,8 @@ void DiscordIpc::tryNextPipe()
         m_retry->start();
         return;
     }
-    // Qt adds the \\.\pipe\ prefix on Windows.
-    m_socket->connectToServer(m_baseName + QString::number(m_pipeIndex));
+    m_socket->connectToServer((m_baseName.isEmpty() ? defaultPipeBaseName() : m_baseName)
+                              + QString::number(m_pipeIndex));
 }
 
 void DiscordIpc::onConnected()

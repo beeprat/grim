@@ -5,6 +5,7 @@
 #include <tag.h>
 #include <tpropertymap.h>
 
+#include <QFileInfo>
 #include <QDataStream>
 #include <QDir>
 #include <QFile>
@@ -39,9 +40,9 @@ bool writeSilentWav(const QString &path, quint32 sampleRate)
     return out.status() == QDataStream::Ok;
 }
 
-std::wstring native(const QString &path)
+std::filesystem::path native(const QString &path)
 {
-    return QDir::toNativeSeparators(path).toStdWString();
+    return QFileInfo(path).filesystemFilePath();
 }
 
 } // namespace
@@ -76,7 +77,7 @@ private slots:
         const QString source = dir.filePath(u"Glóry Box.wav"_s);
         QVERIFY(writeSilentWav(source, sampleRate));
         {
-            const std::wstring path = native(source);
+            const std::filesystem::path path = native(source);
             TagLib::FileRef file(path.c_str());
             TagLib::PropertyMap tags;
             tags.insert("TITLE", TagLib::String(u"Glóry Box"_s.toStdWString()));
@@ -105,7 +106,7 @@ private slots:
         QCOMPARE(track.album, u"Dummy"_s);
         QVERIFY(qAbs(track.durationMs - 1000) < 100);
 
-        const std::wstring targetPath = native(target);
+        const std::filesystem::path targetPath = native(target);
         const TagLib::FileRef converted(targetPath.c_str());
         QCOMPARE(QString::fromStdWString(converted.properties()["REPLAYGAIN_TRACK_GAIN"].toString().toWString()),
                  u"-7.21 dB"_s);

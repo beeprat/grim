@@ -1,7 +1,11 @@
 #include "controllers/DiscordController.h"
 #include "controllers/LastFmController.h"
 #include "controllers/LibraryController.h"
+#ifdef Q_OS_WIN
 #include "controllers/MediaKeys.h"
+#else
+#include "controllers/Mpris.h"
+#endif
 #include "controllers/PlaylistController.h"
 #include "controllers/PlayerController.h"
 #include "controllers/SettingsController.h"
@@ -21,8 +25,13 @@
 #include <QSettings>
 #include <QStandardPaths>
 
+#ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <dwmapi.h>
+#else
+#include <QFont>
+#include <QFontDatabase>
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -44,6 +53,7 @@ int main(int argc, char *argv[])
         QSettings newSettings;
         UserDataMigration::moveSettings(oldSettings, newSettings);
     }
+#ifdef Q_OS_WIN
     {
         // Drop the emptied old registry key, but only if nothing else lives under "MusicPlayer"
         // (another program could use that organization name).
@@ -55,6 +65,15 @@ int main(int argc, char *argv[])
             && oldOrganization.allKeys().isEmpty())
             software.remove(QStringLiteral("MusicPlayer"));
     }
+#else
+    // Windows draws the UI in Segoe UI; Linux gets Selawik, Microsoft's open-licence Segoe UI stand-in,
+    // so text keeps the same look and metrics.
+    for (const char *face : {"selawk", "selawksl", "selawkl", "selawksb", "selawkb"})
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/%1.ttf").arg(QLatin1String(face)));
+    QApplication::setFont(QFont(QStringLiteral("Selawik"), 9));
+    // Wayland matches the window to grim.desktop (icon, name in the dock).
+    QGuiApplication::setDesktopFileName(QStringLiteral("grim"));
+#endif
     // Shown name.
     QApplication::setApplicationDisplayName(QStringLiteral("grim."));
     const QIcon appIcon(QStringLiteral(":/qt/qml/MusicPlayer/qml/icons/app.svg"));
@@ -85,7 +104,11 @@ int main(int argc, char *argv[])
                      [&] { playerController.setCrossfadeMs(qRound(settings.crossfadeSeconds() * 1000)); });
     QObject::connect(&settings, &SettingsController::onlineLyricsChanged, &playerController,
                      [&] { playerController.setOnlineLyrics(settings.onlineLyrics()); });
+#ifdef Q_OS_WIN
     MediaKeys mediaKeys(playerController);
+#else
+    Mpris mpris(playerController);
+#endif
     // Plays not yet accepted by Last.fm survive restarts in this file.
     LastFmController lastFm(dataDir + QStringLiteral("/scrobble-queue.json"), dataDir + QStringLiteral("/lastfm.txt"));
     playerController.setScrobbleAfterMs(LastFmController::kScrobbleAfterMs);
@@ -117,11 +140,15 @@ int main(int argc, char *argv[])
     if (!engine.rootObjects().isEmpty()) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
         tray.setWindow(window);
+#ifdef Q_OS_WIN
         mediaKeys.registerFor(window);
         // Windows 11 rounds the frameless window's corners like normal windows (ignored on Windows 10).
         const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
         DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_WINDOW_CORNER_PREFERENCE,
                               &corners, sizeof(corners));
+#else
+        mpris.setWindow(window);
+#endif
     }
 
     return QApplication::exec();

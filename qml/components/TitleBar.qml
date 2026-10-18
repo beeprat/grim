@@ -59,6 +59,7 @@ Rectangle {
         id: button
 
         property bool danger: false // close button: red on hover
+        property string shape // minimize / maximize / restore / close, drawn where Segoe MDL2 is missing
         readonly property color hoverColor: danger ? "#c42b1c" : Theme.subtle
 
         Layout.preferredWidth: 46
@@ -71,12 +72,63 @@ Rectangle {
                  : button.hovered ? button.hoverColor
                  : "transparent"
         }
-        contentItem: Text {
-            text: button.text
-            font: button.font
-            color: button.danger && button.hovered ? "white" : Material.foreground
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+        contentItem: Item {
+            id: glyphs
+
+            readonly property color ink: button.danger && button.hovered ? "white" : Material.foreground
+
+            Text {
+                anchors.fill: parent
+                visible: Qt.platform.os === "windows"
+                text: button.text
+                font: button.font
+                color: glyphs.ink
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            // Other systems lack the Windows icon font: the same 10 px glyphs drawn with 1 px lines.
+            Item {
+                anchors.centerIn: parent
+                width: 10
+                height: 10
+                visible: Qt.platform.os !== "windows"
+
+                Rectangle { // minimize
+                    visible: button.shape === "minimize"
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 10
+                    height: 1
+                    color: glyphs.ink
+                }
+                Rectangle { // maximize, and the front window of restore
+                    visible: button.shape === "maximize" || button.shape === "restore"
+                    x: 0
+                    y: button.shape === "restore" ? 2 : 0
+                    width: button.shape === "restore" ? 8 : 10
+                    height: width
+                    color: "transparent"
+                    border.width: 1
+                    border.color: glyphs.ink
+                }
+                Item { // the back window of restore: top and right edges only
+                    visible: button.shape === "restore"
+                    Rectangle { x: 2; y: 0; width: 8; height: 1; color: glyphs.ink }
+                    Rectangle { x: 9; y: 0; width: 1; height: 8; color: glyphs.ink }
+                }
+                Repeater { // close: two diagonals
+                    model: button.shape === "close" ? [45, -45] : []
+                    Rectangle {
+                        required property int modelData
+                        anchors.centerIn: parent
+                        width: 13
+                        height: 1
+                        rotation: modelData
+                        antialiasing: true
+                        color: glyphs.ink
+                    }
+                }
+            }
         }
     }
 
@@ -211,16 +263,19 @@ Rectangle {
 
         WindowButton {
             text: "" // ChromeMinimize
+            shape: "minimize"
             onClicked: bar.window.showMinimized()
         }
 
         WindowButton {
             text: bar.maximized ? "" : "" // ChromeRestore / ChromeMaximize
+            shape: bar.maximized ? "restore" : "maximize"
             onClicked: bar.maximized ? bar.window.showNormal() : bar.window.showMaximized()
         }
 
         WindowButton {
             text: "" // ChromeClose
+            shape: "close"
             danger: true
             onClicked: bar.window.close()
         }

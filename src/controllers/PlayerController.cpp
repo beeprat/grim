@@ -415,7 +415,7 @@ void PlayerController::playAt(int orderPosition, int crossfadeMs, bool autoplay)
     m_orderPosition = orderPosition;
 
     const QString path = m_queue.value(m_order.value(orderPosition, -1));
-    if (path.isEmpty() || !m_engine.load(path.toStdWString(), crossfadeMs)) {
+    if (path.isEmpty() || !m_engine.load(QFileInfo(path).filesystemFilePath(), crossfadeMs)) {
         qWarning() << "PlayerController: cannot play" << path;
         m_track = {};
         m_positionMs = 0;
@@ -451,7 +451,7 @@ void PlayerController::queueNextIfDue(qint64 positionMs)
         || m_track.durationMs <= 0 || positionMs < m_track.durationMs - kQueueAheadMs)
         return;
     m_queueTried = true;
-    m_engine.queueNext(m_queue.value(m_order.at(m_orderPosition + 1)).toStdWString());
+    m_engine.queueNext(QFileInfo(m_queue.value(m_order.at(m_orderPosition + 1))).filesystemFilePath());
 }
 
 void PlayerController::togglePlay()

@@ -6,6 +6,11 @@
 #include "core/TagReader.h"
 
 #include <QDir>
+#ifndef Q_OS_WIN
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDesktopServices>
+#endif
 #include <QFile>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -184,11 +189,21 @@ void LibraryController::showInFolder(const QUrl &fileUrl) const
     const QString path = QDir::toNativeSeparators(fileUrl.toLocalFile());
     if (path.isEmpty())
         return;
+#ifdef Q_OS_WIN
     // explorer.exe wants `/select,"<path>"` as one raw argument; QProcess quoting would break it.
     QProcess explorer;
     explorer.setProgram(QStringLiteral("explorer.exe"));
     explorer.setNativeArguments(QStringLiteral("/select,\"%1\"").arg(path));
     explorer.startDetached();
+#else
+    // Ask the file manager to open the folder with the file selected; just the folder if none answers.
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.FileManager1"), QStringLiteral("/org/freedesktop/FileManager1"),
+        QStringLiteral("org.freedesktop.FileManager1"), QStringLiteral("ShowItems"));
+    call << QStringList{fileUrl.toString()} << QString();
+    if (QDBusConnection::sessionBus().call(call, QDBus::Block, 3000).type() != QDBusMessage::ReplyMessage)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
+#endif
 }
 
 const Track *LibraryController::findTrack(const QString &path) const

@@ -27,8 +27,8 @@ Track read(const QString &filePath)
     Track track;
     track.path = info.absoluteFilePath();
 
-    // TagLib::FileName is wchar_t-based on Windows, so non-ASCII paths work.
-    const TagLib::FileRef file(info.absoluteFilePath().toStdWString().c_str(), true,
+    // filesystem paths are wchar_t on Windows (TagLib::FileName too) and UTF-8 bytes on Linux, so non-ASCII names work.
+    const TagLib::FileRef file(info.filesystemAbsoluteFilePath().c_str(), true,
                                TagLib::AudioProperties::Average);
     if (!file.isNull()) {
         if (const TagLib::Tag *tag = file.tag()) {
@@ -54,7 +54,7 @@ Track read(const QString &filePath)
 
 QByteArray readCover(const QString &filePath)
 {
-    const std::wstring path = QDir::toNativeSeparators(filePath).toStdWString();
+    const std::filesystem::path path = QFileInfo(filePath).filesystemFilePath();
     const TagLib::FileRef file(path.c_str(), false);
     if (!file.isNull()) {
         const auto pictures = file.complexProperties("PICTURE");
