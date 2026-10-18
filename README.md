@@ -39,9 +39,9 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 - pretraga po albumu, izvođaču ili traci, filtriranje po formatu i bitrate.
 - preuzimanja idu direktno u library, konvertovanje u M4A, MP3 ili FLAC, ili original.
 
-**online usluge:** (ophodne, isključeni dok se ne podese)
-- last.fm scrobbling sa svojim API key.
-- discord rich presence sa album covers.
+**online usluge:** (ophodne)
+- last.fm scrobbling
+- discord rich presence
 
 **ostalo:**
 - accent boje, tri tamne pozadine, corner roundness i interfejs zum (ctrl + točkić)
@@ -65,17 +65,11 @@ preuzmi najnoviji release:
 podešavanja, ocene, plejliste i statistike su smeštene u `%APPDATA%\grimPlayer\grimPlayer`, cache u`%LOCALAPPDATA%\grimPlayer\grimPlayer`.
 brisanje aplikacije ne briše ove podatke.
 
-## podešavanje usluga
+## podešavanje slskd
 
 **Soulseek:** pokrenuti slskd i ulogovati se u Soulseek, u grim., otvoriti podešavanja → slskd i ukucati adresu (podrazumevana: `http://localhost:5030`) i API key.
 ako slskd radi sa `--no-auth`, takođe ga započeti sa `--http-ip-address 127.0.0.1` da bi ga samo tvoj računar pristupio.
 statusna tačka u title baru pokazuje da li je slskd dostupan.
-
-**Last.fm:** napravi API nalog na [last.fm/api/account/create](https://www.last.fm/api/account/create), nalepi API key i shared secret u podešavanjima → Last.fm, zatim connect.
-
-**Discord:** napravi aplikaciju na [discord.com/developers/applications](https://discord.com/developers/applications) (ime aplikacije je ime koje Discord prikazuje) nalepi Application ID u podešavanjima → Discord.
-za album cover, koristiti `546c25a59c58ad7` kao imgur Client-ID
-**(BOLJI NAČIN ZA DISCORD RICH PRESENCE JE U PROCESU)**
 
 ## privatnost
 
