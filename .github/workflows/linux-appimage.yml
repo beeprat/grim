@@ -51,6 +51,8 @@ jobs:
           # Wayland as well as X11 (the plugin names changed in Qt 6.10, so take whatever is there).
           export EXTRA_PLATFORM_PLUGINS=$(cd "$QT_ROOT_DIR/plugins/platforms" && ls libqwayland*.so | paste -sd ';')
           echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
+          # Only SQLite is used; the other SQL drivers need client libraries that are not installed.
+          find "$QT_ROOT_DIR/plugins/sqldrivers" -name '*.so' ! -name 'libqsqlite.so' -delete
           DESTDIR=AppDir cmake --install build
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
