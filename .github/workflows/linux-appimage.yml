@@ -46,9 +46,11 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: 1
           QML_SOURCES_PATHS: ${{ github.workspace }}/qml
           EXTRA_QT_MODULES: svg;dbus
-          EXTRA_PLATFORM_PLUGINS: libqwayland-egl.so;libqwayland-generic.so
           LDAI_OUTPUT: grim-x86_64.AppImage
         run: |
+          # Wayland as well as X11 (the plugin names changed in Qt 6.10, so take whatever is there).
+          export EXTRA_PLATFORM_PLUGINS=$(cd "$QT_ROOT_DIR/plugins/platforms" && ls libqwayland*.so | paste -sd ';')
+          echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
           DESTDIR=AppDir cmake --install build
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
