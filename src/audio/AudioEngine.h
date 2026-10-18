@@ -1,0 +1,64 @@
+#pragma once
+
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+
+// Plays one track at a time on the default output device (miniaudio, WASAPI).
+// WAV/FLAC/MP3 decode in miniaudio; M4A/AAC through Media Foundation (MfAudioSource).
+// Call every method from one thread (the GUI thread). miniaudio decodes on its
+// own job thread and mixes on the device thread; the calls used here are safe
+// against both.
+class AudioEngine
+{
+public:
+    AudioEngine();
+    ~AudioEngine();
+    AudioEngine(const AudioEngine &) = delete;
+    AudioEngine &operator=(const AudioEngine &) = delete;
+
+    // False if no output device could be opened; every other call is then a no-op.
+    bool isReady() const;
+
+    // Replaces the current track. The new track starts paused at 0.
+    // crossfadeMs > 0 while playing: the old track fades out over that time while the new
+    // one fades in once play() is called.
+    bool load(const std::filesystem::path &file, int crossfadeMs = 0);
+    // Frees a track whose crossfade-out has finished. Call regularly (the player's poll).
+    void update();
+
+    // Gapless playback: loads `file` and schedules it to start on the exact frame the
+    // current track ends. Only while playing, with a known track length and no crossfade
+    // running. Cancelled by load(), pause(), seek() and cancelQueued().
+    bool queueNext(const std::filesystem::path &file);
+    bool hasQueued() const;
+    void cancelQueued();
+    // The current track has ended and the queued one took over: makes it the current track.
+    // False if nothing was queued.
+    bool promoteQueued();
+    void unload();
+    bool hasTrack() const;
+
+    void play();
+    void pause();
+    bool isPlaying() const;
+    // True once playback has reached the end; play() then restarts from 0.
+    bool atEnd() const;
+
+    void seek(std::int64_t positionMs);
+    std::int64_t positionMs() const;
+    std::int64_t durationMs() const; // 0 if the decoder cannot tell
+
+    // Master output volume, linear 0..1. Per-track gain (ReplayGain) is separate.
+    void setVolume(float volume);
+
+    // Effects, applied to everything that plays. Speed resamples (1 = normal, 0.8 = slower and
+    // lower, like a slowed-down record); reverb 0..1; pitch in semitones with tempo unchanged.
+    void setSpeed(float speed);
+    void setReverb(float amount);
+    void setPitchSemitones(float semitones);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};

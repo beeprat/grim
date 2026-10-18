@@ -1,0 +1,2 @@
+// The exe's icon (Explorer, taskbar pin, Alt+Tab before the window sets its own).
+IDI_ICON1 ICON "app.ico"

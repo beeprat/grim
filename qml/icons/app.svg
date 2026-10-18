@@ -1,0 +1,4 @@
+<!-- App icon: a plain white five-pointed star. Also packed into resources/app.ico for the exe. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <path fill="#ffffff" d="M32 3 L40.2 21.7 L60.6 23.6 L45.2 37.2 L49.7 57.2 L32 46.7 L14.3 57.2 L18.8 37.2 L3.4 23.6 L23.8 21.7 Z"/>
+</svg>
