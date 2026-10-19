@@ -270,6 +270,12 @@ private:
   repeat or crossfade change and any order change (`rebuildOrder`) drop the queued track; it is re-queued
   when due. Not for repeat one or the wrap-around of repeat all, or tracks of unknown length.
   Tested in `tests/tst_audioengine.cpp`.
+- A-B loop (`PlayerController.loopStartMs/loopEndMs`, -1 = unset; `setLoopStart/setLoopEnd/clearLoop`): `SeekBar.qml`
+  Ctrl+press marks the start (drag fine-tunes, committed on release), the next Ctrl+press the end (swapped if
+  earlier; jumps into the loop); a Ctrl+press on a complete loop starts a new one; right-click clears. Drawn as an
+  accent band with end markers, elapsed time in accent. `poll()` seeks back to the start at the end (or when the
+  track runs out) and polls every 15 ms while a loop is set; gapless queueing and crossfade are off inside a loop.
+  A new track clears it; not saved across restarts.
 - On quit `PlayerController` saves the queue, track and position (`player/last*`); `main.cpp` calls
   `restoreLastTrack()` (paused, at that position) unless a file was passed on the command line.
 - Track rows (library list, album page, playlists) call `playTrack(urls, index)`: clicking the loaded track

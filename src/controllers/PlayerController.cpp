@@ -18,6 +18,8 @@ namespace {
 
 // Drives the position display and end-of-track detection.
 constexpr int kPollIntervalMs = 200;
+// While an A-B loop is set: how late the jump back to its start can come.
+constexpr int kLoopPollIntervalMs = 15;
 // How often a running session's listening time is written, so stats are live
 // and a crash loses at most this much.
 constexpr int kSaveIntervalMs = 5000;
@@ -438,6 +440,7 @@ void PlayerController::trackLoaded(const QString &path)
         m_track.durationMs = decodedMs;
     m_positionMs = 0;
     m_queueTried = false;
+    applyLoop(-1, -1);
     emit trackChanged();
     emit positionChanged();
     loadLyrics();
@@ -447,7 +450,7 @@ void PlayerController::queueNextIfDue(qint64 positionMs)
 {
     // Only plain advances: crossfade has its own transition, repeat one replays, and the
     // wrap-around of repeat all may reshuffle the order first.
-    if (m_queueTried || m_crossfadeMs > 0 || m_repeat == RepeatOne || m_orderPosition + 1 >= m_order.size()
+    if (m_queueTried || loopActive() || m_crossfadeMs > 0 || m_repeat == RepeatOne || m_orderPosition + 1 >= m_order.size()
         || m_track.durationMs <= 0 || positionMs < m_track.durationMs - kQueueAheadMs)
         return;
     m_queueTried = true;
@@ -518,6 +521,55 @@ void PlayerController::previous()
     playAt(m_orderPosition > 0 ? m_orderPosition - 1 : static_cast<int>(m_order.size()) - 1);
 }
 
+qint64 PlayerController::loopStartMs() const
+{
+    return m_loopStartMs;
+}
+
+qint64 PlayerController::loopEndMs() const
+{
+    return m_loopEndMs;
+}
+
+void PlayerController::setLoopStart(qint64 positionMs)
+{
+    if (!m_engine.hasTrack())
+        return;
+    positionMs = std::clamp<qint64>(positionMs, 0, std::max<qint64>(m_track.durationMs, 0));
+    applyLoop(positionMs, m_loopEndMs > positionMs ? m_loopEndMs : -1);
+}
+
+void PlayerController::setLoopEnd(qint64 positionMs)
+{
+    if (!m_engine.hasTrack() || m_loopStartMs < 0)
+        return;
+    positionMs = std::clamp<qint64>(positionMs, 0, std::max<qint64>(m_track.durationMs, 0));
+    if (positionMs == m_loopStartMs)
+        return;
+    applyLoop(std::min(m_loopStartMs, positionMs), std::max(m_loopStartMs, positionMs));
+    if (m_positionMs < m_loopStartMs || m_positionMs >= m_loopEndMs)
+        seek(m_loopStartMs); // start hearing the loop right away
+}
+
+void PlayerController::clearLoop()
+{
+    applyLoop(-1, -1);
+}
+
+void PlayerController::applyLoop(qint64 startMs, qint64 endMs)
+{
+    if (startMs == m_loopStartMs && endMs == m_loopEndMs)
+        return;
+    m_loopStartMs = startMs;
+    m_loopEndMs = endMs;
+    if (loopActive()) {
+        m_engine.cancelQueued(); // a gapless next track would start at the track's end
+        m_queueTried = false;
+    }
+    m_pollTimer->setInterval(loopActive() ? kLoopPollIntervalMs : kPollIntervalMs);
+    emit loopChanged();
+}
+
 void PlayerController::seek(qint64 positionMs)
 {
     positionMs = std::clamp<qint64>(positionMs, 0, std::max<qint64>(m_track.durationMs, 0));
@@ -531,6 +583,14 @@ void PlayerController::seek(qint64 positionMs)
 
 void PlayerController::poll()
 {
+    // A-B loop: back to its start at its end (or if the track ran out because the end is the track's end).
+    if (loopActive() && (m_engine.atEnd() || m_engine.positionMs() >= m_loopEndMs)) {
+        const bool stopped = m_engine.atEnd();
+        seek(m_loopStartMs);
+        if (stopped)
+            m_engine.play();
+        return;
+    }
     // Gapless: the queued next track already started on the last frame of this one.
     if (m_engine.atEnd() && m_engine.promoteQueued()) {
         m_positionMs = m_track.durationMs;
@@ -563,7 +623,7 @@ void PlayerController::poll()
     // Crossfade: start the next track while this one still has crossfadeMs left. Only for
     // automatic changes (not repeat one) and tracks long enough to hold two fades.
     const qint64 duration = m_track.durationMs;
-    if (m_crossfadeMs > 0 && m_repeat != RepeatOne && duration > 2 * m_crossfadeMs
+    if (m_crossfadeMs > 0 && !loopActive() && m_repeat != RepeatOne && duration > 2 * m_crossfadeMs
         && position >= duration - m_crossfadeMs && advance(m_crossfadeMs))
         return;
     queueNextIfDue(position);

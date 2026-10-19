@@ -53,6 +53,9 @@ class PlayerController : public QObject
     Q_PROPERTY(double pitchSemitones READ pitchSemitones WRITE setPitchSemitones NOTIFY effectsChanged FINAL)
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY shuffleChanged FINAL)
     Q_PROPERTY(Repeat repeat READ repeat WRITE setRepeat NOTIFY repeatChanged FINAL)
+    // A-B loop inside the current track (-1 = not set); playback jumps back to the start at the end.
+    Q_PROPERTY(qint64 loopStartMs READ loopStartMs NOTIFY loopChanged FINAL)
+    Q_PROPERTY(qint64 loopEndMs READ loopEndMs NOTIFY loopChanged FINAL)
 
 public:
     enum Repeat {
@@ -118,6 +121,14 @@ public:
     Q_INVOKABLE void previous();
     Q_INVOKABLE void seek(qint64 positionMs);
 
+    qint64 loopStartMs() const;
+    qint64 loopEndMs() const;
+    // Sets the loop start (clearing an end before it) or end (swapped with the start if earlier).
+    // A new track clears the loop.
+    Q_INVOKABLE void setLoopStart(qint64 positionMs);
+    Q_INVOKABLE void setLoopEnd(qint64 positionMs);
+    Q_INVOKABLE void clearLoop();
+
 signals:
     void trackChanged();
     void playingChanged();
@@ -125,6 +136,7 @@ signals:
     void volumeChanged();
     void shuffleChanged();
     void repeatChanged();
+    void loopChanged();
     void lyricIndexChanged();
     void lyricsShownChanged();
     void effectsChanged();
@@ -178,6 +190,10 @@ private:
     QList<Lyrics::Line> m_lyrics;
     int m_lyricIndex = -1;
     bool m_queueTried = false; // this track already asked the engine to queue the next one
+    qint64 m_loopStartMs = -1;
+    qint64 m_loopEndMs = -1;
+    bool loopActive() const { return m_loopStartMs >= 0 && m_loopEndMs > m_loopStartMs; }
+    void applyLoop(qint64 startMs, qint64 endMs);
     bool m_lyricsShown = true;
     double m_speed = 1;
     double m_reverb = 0;
