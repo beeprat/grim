@@ -22,9 +22,10 @@ public:
                    QObject *parent = nullptr);
 
     void setWindow(QWindow *window);
+    // Shows the window from the tray or the taskbar (keeping it maximized if it was) and brings it to the front.
+    void restoreWindow();
 
 private:
-    void restoreWindow();
     void updateNowPlaying();
 
     SettingsController &m_settings;

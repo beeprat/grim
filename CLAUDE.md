@@ -546,6 +546,10 @@ private:
 
 ## Window chrome
 
+- Single instance: `main.cpp` first tries `QLocalSocket` to `grimPlayer-<user name>`. If grim. already runs, it
+  sends its file argument (may be empty), calls `AllowSetForegroundWindow` (Windows) and exits before touching any
+  data; the running one (`QLocalServer`) opens that file, if any, and `TrayController::restoreWindow()` brings the
+  window back from the tray/taskbar (un-minimizes, keeps it maximized) to the front.
 - The window is frameless (`Qt.FramelessWindowHint`). `main.cpp` asks DWM for Windows 11 rounded corners
   (`DWMWA_WINDOW_CORNER_PREFERENCE`, links `dwmapi`). `qml/components/TitleBar.qml` handles drag
   (`startSystemMove`), double-click maximize, the window buttons (Segoe MDL2 Assets glyphs) and the

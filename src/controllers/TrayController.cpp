@@ -71,9 +71,10 @@ void TrayController::updateNowPlaying()
 
 void TrayController::restoreWindow()
 {
-    if (!m_window || (m_window->isVisible() && m_window->visibility() != QWindow::Minimized))
+    if (!m_window)
         return;
-    m_window->showNormal();
+    m_window->setWindowStates(m_window->windowStates() & ~Qt::WindowMinimized);
+    m_window->show();
     m_window->raise();
     m_window->requestActivate();
 }

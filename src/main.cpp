@@ -20,6 +20,8 @@
 #include <QApplication>
 #include <QDir>
 #include <QIcon>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QSettings>
@@ -37,6 +39,29 @@ int main(int argc, char *argv[])
 {
     // QApplication (not QGuiApplication): the tray icon's context menu is a widget.
     QApplication app(argc, argv);
+
+    // One grim. per user: a second start (shortcut, "Open with") hands its file, if any, to the running one,
+    // which comes to the front, and exits before touching any data.
+    const QString instanceName = QStringLiteral("grimPlayer-")
+        + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
+    const QString fileArgument = QCoreApplication::arguments().value(1);
+    {
+        QLocalSocket running;
+        running.connectToServer(instanceName);
+        if (running.waitForConnected(1000)) {
+#ifdef Q_OS_WIN
+            AllowSetForegroundWindow(ASFW_ANY); // we were just started by the user, so we may pass that on
+#endif
+            running.write(fileArgument.toUtf8());
+            running.waitForBytesWritten(1000);
+            running.disconnectFromServer();
+            return 0;
+        }
+    }
+    QLocalServer::removeServer(instanceName); // a crashed instance's leftover socket file (Linux)
+    QLocalServer instanceServer;
+    if (!instanceServer.listen(instanceName))
+        qWarning("Cannot listen for other instances: %s", qPrintable(instanceServer.errorString()));
     // Organization/application names locate the settings (HKCU\Software\grimPlayer\grimPlayer), the
     // databases (%APPDATA%\grimPlayer\grimPlayer) and caches (%LOCALAPPDATA%\grimPlayer\grimPlayer).
     // Before 2026-10 they were "MusicPlayer"; that data is moved over once, on the first start.
@@ -123,8 +148,8 @@ int main(int argc, char *argv[])
                               dataDir + QStringLiteral("/imgur-covers.json"), dataDir + QStringLiteral("/discord.txt"));
 
     // "Open with" / command line: play the first argument; otherwise reload the last track, paused.
-    if (const QStringList args = QCoreApplication::arguments(); args.size() > 1)
-        playerController.open(QUrl::fromLocalFile(args.at(1)));
+    if (!fileArgument.isEmpty())
+        playerController.open(QUrl::fromLocalFile(fileArgument));
     else
         playerController.restoreLastTrack();
 
@@ -141,6 +166,20 @@ int main(int argc, char *argv[])
     if (!engine.rootObjects().isEmpty()) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
         tray.setWindow(window);
+        QObject::connect(&instanceServer, &QLocalServer::newConnection, &app, [&] {
+            QLocalSocket *other = instanceServer.nextPendingConnection();
+            const auto handle = [&, other] {
+                if (const QString file = QString::fromUtf8(other->readAll()); !file.isEmpty())
+                    playerController.open(QUrl::fromLocalFile(file));
+                tray.restoreWindow();
+                other->deleteLater();
+            };
+            // The other start sends everything, then disconnects; it may already be gone by now.
+            if (other->state() == QLocalSocket::UnconnectedState)
+                handle();
+            else
+                QObject::connect(other, &QLocalSocket::disconnected, other, handle);
+        });
 #ifdef Q_OS_WIN
         mediaKeys.registerFor(window);
         // Windows 11 rounds the frameless window's corners like normal windows (ignored on Windows 10).
