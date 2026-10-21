@@ -140,6 +140,10 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   `TaskbarButtonCreated` (first show, back from the tray, Explorer restart); clicks arrive as `WM_COMMAND`.
 - Single instance: `QLocalSocket`/`QLocalServer` named `grimPlayer-<user>`; a second start hands over its file
   argument and exits before touching data.
+- Update check: `controllers/UpdateController` asks `api.github.com/repos/beeprat/grim/releases/latest` once at
+  startup and compares its tag with `GRIM_VERSION` (= CMake `PROJECT_VERSION`, so bump that per release); a newer one
+  shows a pill in the middle of `TitleBar.qml` opening the release page. `core/UpdateCheck` only accepts
+  `https://github.com/...` page URLs. Failures are silent.
 
 ## UI
 

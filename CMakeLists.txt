@@ -115,6 +115,8 @@ add_library(musicplayer_core STATIC
     src/core/Lyrics.cpp
     src/core/ReplayGain.h
     src/core/ReplayGain.cpp
+    src/core/UpdateCheck.h
+    src/core/UpdateCheck.cpp
     src/core/LyricsFetcher.h
     src/core/LyricsFetcher.cpp
     src/core/ArtistImageFetcher.h
@@ -196,6 +198,8 @@ qt_add_qml_module(MusicPlayer
         src/controllers/SlskdController.cpp
         src/controllers/StatsController.h
         src/controllers/StatsController.cpp
+        src/controllers/UpdateController.h
+        src/controllers/UpdateController.cpp
         src/providers/AlbumsModel.h
         src/providers/AlbumsModel.cpp
         src/providers/DownloadsModel.h
@@ -298,7 +302,8 @@ qt_add_resources(MusicPlayer "ui_strings"
     BASE ${CMAKE_CURRENT_BINARY_DIR}
     FILES ${CMAKE_CURRENT_BINARY_DIR}/ui_strings.txt)
 # windows.h (MediaKeys) otherwise defines min/max macros.
-target_compile_definitions(MusicPlayer PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+# GRIM_VERSION: compared with the latest GitHub release at startup (UpdateController).
+target_compile_definitions(MusicPlayer PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN GRIM_VERSION="${PROJECT_VERSION}")
 if(MSVC)
     # C4702 (unreachable code) fires inside Qt headers for qmlcachegen-compiled QML;
     # it is a codegen warning, so /external cannot silence it.
@@ -410,6 +415,12 @@ qt_add_executable(tst_replaygain tests/tst_replaygain.cpp)
 target_link_libraries(tst_replaygain PRIVATE musicplayer_core tag Qt6::Test musicplayer_warnings)
 add_test(NAME tst_replaygain COMMAND tst_replaygain)
 set_tests_properties(tst_replaygain PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_updatecheck tests/tst_updatecheck.cpp)
+target_link_libraries(tst_updatecheck PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_updatecheck COMMAND tst_updatecheck)
+set_tests_properties(tst_updatecheck PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_userdatamigration tests/tst_userdatamigration.cpp)

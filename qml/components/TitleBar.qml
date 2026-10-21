@@ -143,6 +143,33 @@ Rectangle {
         onDoubleTapped: bar.maximized ? bar.window.showNormal() : bar.window.showMaximized()
     }
 
+    // A newer release on GitHub (checked at startup): opens its download page.
+    AbstractButton {
+        id: updateNote
+
+        anchors.centerIn: parent
+        height: 24
+        visible: UpdateController.latestVersion !== ""
+        hoverEnabled: true
+        leftPadding: 12
+        rightPadding: 12
+        onClicked: Qt.openUrlExternally(UpdateController.downloadUrl)
+
+        ToolTip.visible: hovered
+        ToolTip.delay: 300
+        ToolTip.text: qsTr("Open the download page on GitHub")
+
+        background: Rectangle {
+            radius: height / 2
+            color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, updateNote.hovered ? 0.35 : 0.2)
+        }
+        contentItem: Label {
+            text: qsTr("grim. %1 is available").arg(UpdateController.latestVersion)
+            font.pixelSize: 12
+            verticalAlignment: Text.AlignVCenter
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 16

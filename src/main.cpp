@@ -12,6 +12,7 @@
 #include "controllers/SlskdController.h"
 #include "controllers/StatsController.h"
 #include "controllers/TrayController.h"
+#include "controllers/UpdateController.h"
 #include "core/LibraryDatabase.h"
 #include "core/StatsDatabase.h"
 #include "core/UserDataMigration.h"
@@ -101,6 +102,7 @@ int main(int argc, char *argv[])
 #endif
     // Shown name.
     QApplication::setApplicationDisplayName(QStringLiteral("grim."));
+    QApplication::setApplicationVersion(QStringLiteral(GRIM_VERSION));
     const QIcon appIcon(QStringLiteral(":/qt/qml/MusicPlayer/qml/icons/app.svg"));
     QApplication::setWindowIcon(appIcon);
 
@@ -123,6 +125,7 @@ int main(int argc, char *argv[])
     QObject::connect(&slskd, &SlskdController::trackImported, &library, &LibraryController::addFile);
     QObject::connect(&library, &LibraryController::aboutToDelete, &playerController, &PlayerController::releaseFiles);
     TrayController tray(settings, playerController, appIcon);
+    UpdateController updates(QApplication::applicationVersion());
     playerController.setOnlineLyrics(settings.onlineLyrics());
     playerController.setCrossfadeMs(qRound(settings.crossfadeSeconds() * 1000));
     QObject::connect(&settings, &SettingsController::crossfadeSecondsChanged, &playerController,
@@ -172,6 +175,7 @@ int main(int argc, char *argv[])
     if (!engine.rootObjects().isEmpty()) {
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
         tray.setWindow(window);
+        updates.check();
         QObject::connect(&instanceServer, &QLocalServer::newConnection, &app, [&] {
             QLocalSocket *other = instanceServer.nextPendingConnection();
             const auto handle = [&, other] {
