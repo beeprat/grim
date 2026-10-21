@@ -33,6 +33,9 @@ constexpr qint64 kQueueAheadMs = 5000;
 const auto kLastQueueKey = QStringLiteral("player/lastQueue");
 const auto kLastIndexKey = QStringLiteral("player/lastIndex");
 const auto kLastPositionKey = QStringLiteral("player/lastPositionMs");
+const auto kVolumeKey = QStringLiteral("player/volume");
+const auto kShuffleKey = QStringLiteral("player/shuffle");
+const auto kRepeatKey = QStringLiteral("player/repeat");
 
 } // namespace
 
@@ -52,6 +55,14 @@ PlayerController::PlayerController(StatsDatabase &stats, QObject *parent)
     connect(m_pollTimer, &QTimer::timeout, this, &PlayerController::poll);
     m_saveTimer->setInterval(kSaveIntervalMs);
     connect(m_saveTimer, &QTimer::timeout, this, &PlayerController::saveSession);
+
+    // The controls as they were when the app last quit.
+    const QSettings settings;
+    m_volume = std::clamp(settings.value(kVolumeKey, 1.0).toDouble(), 0.0, 1.0);
+    m_engine.setVolume(static_cast<float>(m_volume));
+    m_shuffle = settings.value(kShuffleKey, false).toBool();
+    m_repeat = static_cast<Repeat>(std::clamp(settings.value(kRepeatKey, int(RepeatOff)).toInt(), int(RepeatOff),
+                                              int(RepeatOne)));
 }
 
 PlayerController::~PlayerController()
@@ -338,9 +349,12 @@ void PlayerController::open(const QUrl &fileUrl)
 
 void PlayerController::saveLastTrack() const
 {
-    if (!m_engine.hasTrack())
-        return; // nothing loaded: keep what an earlier run saved
     QSettings settings;
+    settings.setValue(kVolumeKey, m_volume);
+    settings.setValue(kShuffleKey, m_shuffle);
+    settings.setValue(kRepeatKey, int(m_repeat));
+    if (!m_engine.hasTrack())
+        return; // nothing loaded: keep the track an earlier run saved
     settings.setValue(kLastQueueKey, QStringList(m_queue));
     settings.setValue(kLastIndexKey, m_order.value(m_orderPosition, -1));
     settings.setValue(kLastPositionKey, m_positionMs);

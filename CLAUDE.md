@@ -276,7 +276,8 @@ private:
   accent band with end markers, elapsed time in accent. `poll()` seeks back to the start at the end (or when the
   track runs out) and polls every 15 ms while a loop is set; gapless queueing and crossfade are off inside a loop.
   A new track clears it; not saved across restarts.
-- On quit `PlayerController` saves the queue, track and position (`player/last*`); `main.cpp` calls
+- On quit `PlayerController` saves volume, shuffle and repeat (`player/volume|shuffle|repeat`, loaded in its
+  constructor) and the queue, track and position (`player/last*`); `main.cpp` calls
   `restoreLastTrack()` (paused, at that position) unless a file was passed on the command line.
 - Track rows (library list, album page, playlists) call `playTrack(urls, index)`: clicking the loaded track
   pauses/resumes it instead of restarting it. Play buttons still use `playQueue`.

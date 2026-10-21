@@ -154,7 +154,7 @@ private:
     void trackLoaded(const QString &path);
     // Gapless: near the end of a track, has the engine queue the next one.
     void queueNextIfDue(qint64 positionMs);
-    // Remembers the queue, track and position for restoreLastTrack().
+    // Remembers volume, shuffle, repeat, and the queue, track and position for restoreLastTrack().
     void saveLastTrack() const;
     // next() with an optional crossfade; false at the end of the queue without repeat.
     bool advance(int crossfadeMs);
