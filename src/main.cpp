@@ -127,11 +127,11 @@ int main(int argc, char *argv[])
     playerController.setCrossfadeMs(qRound(settings.crossfadeSeconds() * 1000));
     QObject::connect(&settings, &SettingsController::crossfadeSecondsChanged, &playerController,
                      [&] { playerController.setCrossfadeMs(qRound(settings.crossfadeSeconds() * 1000)); });
-    playerController.setSongModes(&libraryData);
+    playerController.setSongGains(&libraryData);
     playerController.setReplayGainMode(settings.replayGain());
     QObject::connect(&settings, &SettingsController::replayGainChanged, &playerController,
                      [&] { playerController.setReplayGainMode(settings.replayGain()); });
-    // A song's own ReplayGain mode lives with ratings; reapply it to the playing track.
+    // A song's own dB value lives with ratings; reapply it to the playing track.
     QObject::connect(&library, &LibraryController::metaChanged, &playerController, &PlayerController::refreshReplayGain);
     QObject::connect(&settings, &SettingsController::onlineLyricsChanged, &playerController,
                      [&] { playerController.setOnlineLyrics(settings.onlineLyrics()); });

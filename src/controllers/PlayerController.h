@@ -90,10 +90,10 @@ public:
     void setOnlineLyrics(bool enabled);
     // Overlap at automatic track changes, in ms; 0 = off (Settings → Playback).
     void setCrossfadeMs(int ms);
-    // ReplayGain::Off/Track/Album (Settings → Playback); a song's own mode in `songModes` wins.
+    // ReplayGain::Off/Track/Album (Settings → Playback); a song's own dB value in `songGains` wins.
     void setReplayGainMode(int mode);
-    void setSongModes(const LibraryDatabase *songModes);
-    // Applies the current settings to the playing track again (a song's mode changed).
+    void setSongGains(const LibraryDatabase *songGains);
+    // Applies the current settings to the playing track again (a song's dB value changed).
     void refreshReplayGain();
     void setScrobbleAfterMs(qint64 ms);
     int lyricIndex() const;
@@ -212,7 +212,7 @@ private:
     qint64 m_scrobbleAfterMs = 15000;
     int m_crossfadeMs = 0;
     int m_replayGainMode = ReplayGain::Track;
-    const LibraryDatabase *m_songModes = nullptr;
+    const LibraryDatabase *m_songGains = nullptr;
     ReplayGain::Info m_replayGain; // of the current track
     bool m_lyricsLoading = false;
     bool m_playing = false;

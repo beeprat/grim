@@ -181,8 +181,10 @@ Item {
                     Hint {
                         text: qsTr("Ctrl + mouse wheel also changes the interface size.")
                     }
+                }
 
-                    Label { Layout.topMargin: 4; text: qsTr("Library folder"); opacity: 0.8 }
+                SettingsPanel {
+                    SectionTitle { text: qsTr("Library") }
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -316,7 +318,7 @@ Item {
                     }
 
                     Hint {
-                        text: qsTr("Evens out loudness using the ReplayGain tags in your files (written by foobar2000, Mp3tag, beets and others). Album keeps the differences between songs of one album. Songs without tags play unchanged. Right-click a song to choose differently for it.")
+                        text: qsTr("Evens out loudness using the ReplayGain tags in your files (written by foobar2000, Mp3tag, beets and others). Album keeps the differences between songs of one album. Songs without tags play unchanged. Right-click a song → Volume adjustment to set its own level in dB.")
                     }
                 }
 

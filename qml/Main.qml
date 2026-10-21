@@ -690,6 +690,76 @@ ApplicationWindow {
         onViewAlbumRequested: (fileUrl) => root.showAlbumOf(fileUrl)
         onNewPlaylistRequested: (fileUrls) => newPlaylistWindow.openWith(fileUrls)
         onDeleteAlbumRequested: (fileUrls) => deleteAlbumDialog.ask(fileUrls)
+        onGainRequested: (fileUrls) => gainDialog.ask(fileUrls)
+    }
+
+    // A song's own volume in dB, replacing its ReplayGain tags (LibraryController.setReplayGainDb).
+    Dialog {
+        id: gainDialog
+
+        property var urls: []
+        property real tagDb: NaN
+
+        function ask(fileUrls) {
+            urls = fileUrls
+            tagDb = LibraryController.tagGainDb(fileUrls[0])
+            const own = LibraryController.replayGainDb(fileUrls[0])
+            gainSlider.value = !isNaN(own) ? own : !isNaN(tagDb) ? tagDb : 0
+            open()
+        }
+
+        function dbText(db) {
+            return qsTr("%1 dB").arg((db > 0 ? "+" : "") + db.toFixed(1))
+        }
+
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
+        title: urls.length > 1 ? qsTr("Volume adjustment (%1 tracks)").arg(urls.length) : qsTr("Volume adjustment")
+        standardButtons: Dialog.Save | Dialog.Reset | Dialog.Cancel
+        onAccepted: LibraryController.setReplayGainDb(urls, gainSlider.value)
+        onReset: {
+            LibraryController.setReplayGainDb(urls, NaN)
+            close()
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 4
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Slider {
+                    id: gainSlider
+
+                    Layout.fillWidth: true
+                    from: -20
+                    to: 20
+                    stepSize: 0.5
+                }
+
+                Label {
+                    Layout.preferredWidth: 64
+                    horizontalAlignment: Text.AlignRight
+                    text: gainDialog.dbText(gainSlider.value)
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                opacity: 0.6
+                font.pixelSize: 12
+                text: (isNaN(gainDialog.tagDb) ? qsTr("No ReplayGain tag in the file.")
+                                              : qsTr("ReplayGain tag: %1.").arg(gainDialog.dbText(gainDialog.tagDb)))
+                      + " " + qsTr("Reset goes back to the tags and the ReplayGain setting.")
+            }
+        }
     }
 
     // Deleting an album from the disk always asks first.

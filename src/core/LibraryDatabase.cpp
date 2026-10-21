@@ -1,4 +1,5 @@
 #include "core/LibraryDatabase.h"
+#include "core/ReplayGain.h"
 
 #include <QDateTime>
 #include <QSqlError>
@@ -6,13 +7,14 @@
 #include <QtLogging>
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 
 using namespace Qt::StringLiterals;
 
 namespace {
 
-constexpr int kSchemaVersion = 2;
+constexpr int kSchemaVersion = 3;
 
 std::atomic<int> s_connectionCounter{0};
 
@@ -68,11 +70,13 @@ bool LibraryDatabase::open(const QString &filePath)
     if (!migrate())
         return false;
 
-    if (!query.exec(u"SELECT path, rating, favorite, replaygain FROM track_meta"_s))
+    if (!query.exec(u"SELECT path, rating, favorite, replaygain_db FROM track_meta"_s))
         return logFailure(query);
-    while (query.next())
-        m_meta.insert(query.value(0).toString(),
-                      {query.value(1).toInt(), query.value(2).toBool(), query.value(3).toInt()});
+    while (query.next()) {
+        const QVariant ownDb = query.value(3);
+        m_meta.insert(query.value(0).toString(), {query.value(1).toInt(), query.value(2).toBool(),
+                                                  ownDb.isNull() ? std::nullopt : std::optional(ownDb.toDouble())});
+    }
     return true;
 }
 
@@ -123,6 +127,11 @@ bool LibraryDatabase::migrate()
         {
             u"ALTER TABLE track_meta ADD COLUMN replaygain INTEGER NOT NULL DEFAULT -1 CHECK (replaygain BETWEEN -1 AND 2)"_s,
         },
+        // 2 -> 3: the per-song mode became a per-song volume adjustment in dB, NULL = use the tags
+        {
+            u"ALTER TABLE track_meta DROP COLUMN replaygain"_s,
+            u"ALTER TABLE track_meta ADD COLUMN replaygain_db REAL"_s,
+        },
     };
 
     if (!db.transaction())
@@ -172,35 +181,35 @@ bool LibraryDatabase::setFavorite(const QString &path, bool favorite)
     return saveMeta(path, meta);
 }
 
-int LibraryDatabase::replayGainMode(const QString &path) const
+std::optional<double> LibraryDatabase::replayGainDb(const QString &path) const
 {
-    return m_meta.value(path).replayGain;
+    return m_meta.value(path).replayGainDb;
 }
 
-bool LibraryDatabase::setReplayGainMode(const QString &path, int mode)
+bool LibraryDatabase::setReplayGainDb(const QString &path, std::optional<double> db)
 {
-    if (path.isEmpty() || mode < -1 || mode > 2)
+    if (path.isEmpty() || (db && !(std::abs(*db) <= ReplayGain::kMaxAdjustDb)))
         return false;
     Meta meta = m_meta.value(path);
-    meta.replayGain = mode;
+    meta.replayGainDb = db;
     return saveMeta(path, meta);
 }
 
 bool LibraryDatabase::saveMeta(const QString &path, const Meta &meta)
 {
     QSqlQuery query(database());
-    query.prepare(uR"(INSERT INTO track_meta (path, rating, favorite, favorited_at, replaygain) VALUES (?, ?, ?, ?, ?)
+    query.prepare(uR"(INSERT INTO track_meta (path, rating, favorite, favorited_at, replaygain_db) VALUES (?, ?, ?, ?, ?)
                       ON CONFLICT(path) DO UPDATE SET
                           rating = excluded.rating,
                           favorite = excluded.favorite,
-                          replaygain = excluded.replaygain,
+                          replaygain_db = excluded.replaygain_db,
                           favorited_at = CASE WHEN excluded.favorite AND NOT track_meta.favorite
                                               THEN excluded.favorited_at ELSE track_meta.favorited_at END)"_s);
     query.addBindValue(path);
     query.addBindValue(meta.rating);
     query.addBindValue(meta.favorite ? 1 : 0);
     query.addBindValue(QDateTime::currentSecsSinceEpoch());
-    query.addBindValue(meta.replayGain);
+    query.addBindValue(meta.replayGainDb ? QVariant(*meta.replayGainDb) : QVariant(QMetaType::fromType<double>()));
     if (!query.exec())
         return logFailure(query);
     m_meta.insert(path, meta);

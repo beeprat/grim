@@ -86,9 +86,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   version. To change it, bump `kSchemaVersion` and append a step; never edit a shipped step. `listened_ms` is
   wall-clock playing time; `counted` = 30 s, or half of a track under a minute. Sessions under 1 s are not stored.
   Export/import JSON `format: grim-stats` v1; import skips plays with the same path + start time.
-- `library.sqlite` (`core/LibraryDatabase`): ratings, favorites, per-song ReplayGain mode (schema v2), playlists,
-  keyed by absolute path with forward slashes. Playlist id 0 is the built-in Favorites list. Builds before v2
-  refuse to open a v2 file (no ratings shown) rather than downgrade it.
+- `library.sqlite` (`core/LibraryDatabase`): ratings, favorites, per-song volume adjustment in dB
+  (`replaygain_db`, NULL = tags; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
+  the built-in Favorites list. Older builds refuse a newer schema (no ratings shown) rather than downgrade it.
 - `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
 - `cache/covers` (`core/CoverCache`, key path + mtime + size, `.none` = no cover), `cache/artists` (Deezer photos),
   `cache/lyrics` (LRCLIB; `.none` retried after 7 days). Network failures are never cached. Safe to delete.
@@ -106,8 +106,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Decoders: WAV/FLAC/MP3 via miniaudio; M4A/AAC via `AacSource` = `MfAudioSource` (Media Foundation) on Windows,
   `FfmpegAudioSource` on Linux. Decoding runs on the mixing thread (documented shortcut).
 - Engine volume = user slider; per-sound volume is ReplayGain (`core/ReplayGain`: REPLAYGAIN_* tags read when a
-  track loads, peak-limited; mode Off/Track/Album from Settings → Playback, a song's own mode from the right-click
-  menu wins). A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
+  track loads, peak-limited; mode Off/Track/Album from Settings → Playback). A song's own dB value (right-click →
+  "Volume adjustment…", dialog in `Main.qml`, ±20 dB) replaces the tags in every mode. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
 - Effects: only in the popup by the volume, and applied only while Settings → Effects → "Show effects button" is
   on (`Effects.showInNowPlaying`). Slowed = `ma_sound_set_pitch`; Reverb (Freeverb) and Pitch (SoundTouch 2.3.3, LGPL) in one custom
   `EffectsNode`. Gapless timing and Discord timestamps divide by the speed.

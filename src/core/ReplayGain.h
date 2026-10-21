@@ -8,8 +8,11 @@
 // foobar2000, beets, Mp3tag...). The player applies it as a per-track volume; nothing is scanned here.
 namespace ReplayGain {
 
-// Settings → Playback picks Off/Track/Album; a song's own choice (right-click) overrides it unless Default.
-enum Mode { Default = -1, Off = 0, Track = 1, Album = 2 };
+// Settings → Playback. A song's own dB value (right-click → "Volume adjustment…") replaces the tags in every mode.
+enum Mode { Off = 0, Track = 1, Album = 2 };
+
+// The user's own adjustments are limited to this range, in dB.
+constexpr double kMaxAdjustDb = 20.0;
 
 struct Info
 {
@@ -25,5 +28,7 @@ std::optional<double> parseNumber(const QString &text);
 // Linear volume for `mode` (Off/Track/Album). Album falls back to the track gain and the other way round;
 // the peak keeps a boost from clipping. 1 without tags.
 float factor(const Info &info, int mode);
+// dB to a linear volume.
+float fromDb(double db);
 
 } // namespace ReplayGain

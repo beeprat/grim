@@ -178,15 +178,16 @@ void PlayerController::setReplayGainMode(int mode)
     refreshReplayGain();
 }
 
-void PlayerController::setSongModes(const LibraryDatabase *songModes)
+void PlayerController::setSongGains(const LibraryDatabase *songGains)
 {
-    m_songModes = songModes;
+    m_songGains = songGains;
 }
 
 float PlayerController::replayGainFactor(const QString &path, const ReplayGain::Info &info) const
 {
-    const int songMode = m_songModes ? m_songModes->replayGainMode(path) : ReplayGain::Default;
-    return ReplayGain::factor(info, songMode == ReplayGain::Default ? m_replayGainMode : songMode);
+    if (const std::optional<double> db = m_songGains ? m_songGains->replayGainDb(path) : std::nullopt)
+        return ReplayGain::fromDb(*db);
+    return ReplayGain::factor(info, m_replayGainMode);
 }
 
 void PlayerController::refreshReplayGain()

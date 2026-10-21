@@ -3,6 +3,7 @@
 #include "controllers/SettingsController.h"
 #include "core/LibraryDatabase.h"
 #include "core/LibraryFiles.h"
+#include "core/ReplayGain.h"
 #include "core/TagReader.h"
 
 #include <QDir>
@@ -170,16 +171,22 @@ void LibraryController::setRating(const QUrl &fileUrl, int stars)
     }
 }
 
-int LibraryController::replayGainMode(const QUrl &fileUrl) const
+double LibraryController::replayGainDb(const QUrl &fileUrl) const
 {
-    return m_database.replayGainMode(fileUrl.toLocalFile());
+    return m_database.replayGainDb(fileUrl.toLocalFile()).value_or(qQNaN());
 }
 
-void LibraryController::setReplayGainMode(const QList<QUrl> &fileUrls, int mode)
+double LibraryController::tagGainDb(const QUrl &fileUrl) const
 {
+    return ReplayGain::read(fileUrl.toLocalFile()).trackGainDb.value_or(qQNaN());
+}
+
+void LibraryController::setReplayGainDb(const QList<QUrl> &fileUrls, double db)
+{
+    const std::optional<double> value = qIsNaN(db) ? std::nullopt : std::optional(db);
     bool changed = false;
     for (const QUrl &url : fileUrls)
-        changed = m_database.setReplayGainMode(url.toLocalFile(), mode) || changed;
+        changed = m_database.setReplayGainDb(url.toLocalFile(), value) || changed;
     if (changed) {
         ++m_metaRevision;
         emit metaChanged();

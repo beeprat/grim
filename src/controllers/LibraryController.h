@@ -64,9 +64,12 @@ public:
     Q_INVOKABLE void setRating(const QUrl &fileUrl, int stars);
     Q_INVOKABLE bool isFavorite(const QUrl &fileUrl) const;
     Q_INVOKABLE void toggleFavorite(const QUrl &fileUrl);
-    // A song's own ReplayGain mode (-1 follow the setting, 0 off, 1 track, 2 album).
-    Q_INVOKABLE int replayGainMode(const QUrl &fileUrl) const;
-    Q_INVOKABLE void setReplayGainMode(const QList<QUrl> &fileUrls, int mode);
+    // A song's own volume adjustment in dB (replaces its ReplayGain tags); NaN = none, the tags apply.
+    Q_INVOKABLE double replayGainDb(const QUrl &fileUrl) const;
+    // The track gain in the file's ReplayGain tags; NaN without one.
+    Q_INVOKABLE double tagGainDb(const QUrl &fileUrl) const;
+    // NaN removes the adjustment.
+    Q_INVOKABLE void setReplayGainDb(const QList<QUrl> &fileUrls, double db);
 
     // Opens Explorer with the file selected.
     Q_INVOKABLE void showInFolder(const QUrl &fileUrl) const;

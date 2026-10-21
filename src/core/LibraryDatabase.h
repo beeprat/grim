@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 struct Playlist
 {
     qint64 id = 0;
@@ -34,9 +36,9 @@ public:
     bool isFavorite(const QString &path) const;
     bool setFavorite(const QString &path, bool favorite);
     QStringList favorites() const; // most recently favorited first
-    // The song's own ReplayGain choice (ReplayGain::Mode); Default = follow the setting.
-    int replayGainMode(const QString &path) const;
-    bool setReplayGainMode(const QString &path, int mode);
+    // The song's own volume adjustment in dB (replaces its ReplayGain tags); none = use the tags.
+    std::optional<double> replayGainDb(const QString &path) const;
+    bool setReplayGainDb(const QString &path, std::optional<double> db);
 
     QList<Playlist> playlists() const; // by name
     qint64 createPlaylist(const QString &name, const QStringList &paths); // 0 on failure
@@ -51,7 +53,7 @@ private:
     {
         int rating = 0;
         bool favorite = false;
-        int replayGain = -1; // ReplayGain::Default
+        std::optional<double> replayGainDb;
     };
 
     QSqlDatabase database() const;
