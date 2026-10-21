@@ -3,7 +3,7 @@ import QtQuick.Controls.Material
 import MusicPlayer
 
 // Right-click menu for a track, or for an album (several tracks): play, view album,
-// rate (single track only), open containing folder, add to playlist.
+// rate (single track only), ReplayGain mode, open containing folder, add to playlist.
 // One instance lives in Main; pages open it with ApplicationWindow.window.openTrackMenu().
 CompactMenu {
     // Not "menu": every MenuItem has its own `menu` property (its parent menu), which
@@ -55,6 +55,27 @@ CompactMenu {
         CompactMenuItem {
             text: qsTr("Clear rating")
             onTriggered: LibraryController.setRating(root.firstUrl, 0)
+        }
+    }
+
+    // Applies to every track the menu was opened on (a whole album too).
+    CompactMenu {
+        implicitWidth: 170
+
+        title: qsTr("ReplayGain")
+
+        Repeater {
+            model: [qsTr("As in settings"), qsTr("Off"), qsTr("Track"), qsTr("Album")]
+
+            delegate: CompactMenuItem {
+                required property int index
+                required property string modelData
+
+                text: modelData
+                checkable: true
+                checked: LibraryController.metaRevision >= 0 && LibraryController.replayGainMode(root.firstUrl) === index - 1
+                onTriggered: LibraryController.setReplayGainMode(root.urls, index - 1)
+            }
         }
     }
 

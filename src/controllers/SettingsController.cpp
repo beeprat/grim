@@ -23,6 +23,7 @@ const auto kMinimizeToTrayKey = "window/minimizeToTray"_L1;
 const auto kLanguageKey = "ui/language"_L1;
 const auto kOnlineLyricsKey = "lyrics/fetchOnline"_L1;
 const auto kCrossfadeKey = "playback/crossfadeSeconds"_L1;
+const auto kReplayGainKey = "playback/replayGain"_L1;
 constexpr double kMaxCrossfadeSeconds = 12;
 
 // Tenths of a second within 0..12: the slider's precision, and what gets stored.
@@ -58,6 +59,7 @@ SettingsController::SettingsController(QObject *parent)
     m_language = settings.value(kLanguageKey).toString();
     m_onlineLyrics = settings.value(kOnlineLyricsKey, true).toBool();
     m_crossfadeSeconds = roundedCrossfade(settings.value(kCrossfadeKey, 0).toDouble()); // older versions stored whole seconds
+    m_replayGain = std::clamp(settings.value(kReplayGainKey, 1).toInt(), 0, 2);
 
     QDir().mkpath(translationsFolder());
     reloadLanguages();
@@ -163,6 +165,21 @@ void SettingsController::setCrossfadeSeconds(double seconds)
     m_crossfadeSeconds = seconds;
     QSettings().setValue(kCrossfadeKey, seconds);
     emit crossfadeSecondsChanged();
+}
+
+int SettingsController::replayGain() const
+{
+    return m_replayGain;
+}
+
+void SettingsController::setReplayGain(int mode)
+{
+    mode = std::clamp(mode, 0, 2);
+    if (mode == m_replayGain)
+        return;
+    m_replayGain = mode;
+    QSettings().setValue(kReplayGainKey, mode);
+    emit replayGainChanged();
 }
 
 QString SettingsController::language() const

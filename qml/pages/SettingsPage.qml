@@ -181,6 +181,28 @@ Item {
                     Hint {
                         text: qsTr("Ctrl + mouse wheel also changes the interface size.")
                     }
+
+                    Label { Layout.topMargin: 4; text: qsTr("Library folder"); opacity: 0.8 }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        TextField {
+                            Layout.fillWidth: true
+                            readOnly: true
+                            text: SettingsController.libraryFolder.replace(/\//g, "\\") // Windows-style for display
+                        }
+
+                        Button {
+                            text: qsTr("Change…")
+                            onClicked: folderDialog.open()
+                        }
+                    }
+
+                    Hint {
+                        text: qsTr("Every music file in this folder and its subfolders shows up in the library. Finished Soulseek downloads are moved here, converted first to the format picked on the Soulseek page (M4A 320 kbps by default); a converted original goes to the Recycle Bin.")
+                    }
                 }
 
                 SettingsPanel {
@@ -278,14 +300,28 @@ Item {
                     Hint {
                         text: qsTr("The end of a song fades into the next one. Skipping a song by hand stays instant.")
                     }
+
+                    RowLayout {
+                        Layout.topMargin: 4
+                        spacing: 12
+
+                        Label { text: qsTr("ReplayGain") }
+
+                        CompactComboBox {
+                            Layout.preferredWidth: 160
+                            model: [qsTr("Off"), qsTr("Track"), qsTr("Album")]
+                            currentIndex: SettingsController.replayGain
+                            onActivated: (index) => SettingsController.replayGain = index
+                        }
+                    }
+
+                    Hint {
+                        text: qsTr("Evens out loudness using the ReplayGain tags in your files (written by foobar2000, Mp3tag, beets and others). Album keeps the differences between songs of one album. Songs without tags play unchanged. Right-click a song to choose differently for it.")
+                    }
                 }
 
                 SettingsPanel {
                     SectionTitle { text: qsTr("Effects") }
-
-                    EffectsControls {
-                        Layout.fillWidth: true
-                    }
 
                     Switch {
                         Layout.leftMargin: -6 // align the switch track with the text above
@@ -295,7 +331,7 @@ Item {
                     }
 
                     Hint {
-                        text: qsTr("Slowed plays songs slower and lower, like a record at a slower speed. Pitch raises or lowers the key in semitones without changing the tempo. Effects apply to everything that plays. With \"Show effects button\" on, a button next to the volume opens them there too.")
+                        text: qsTr("Shows a button next to the volume that opens Slowed, Reverb and Pitch. Effects apply to everything that plays, and only while this is on.")
                     }
                 }
 
@@ -311,30 +347,6 @@ Item {
 
                     Hint {
                         text: qsTr("For songs without lyrics in the file, the artist, title, album and length are sent to lrclib.net. Found lyrics are kept on this PC.")
-                    }
-                }
-
-                SettingsPanel {
-                    SectionTitle { text: qsTr("Library") }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        TextField {
-                            Layout.fillWidth: true
-                            readOnly: true
-                            text: SettingsController.libraryFolder.replace(/\//g, "\\") // Windows-style for display
-                        }
-
-                        Button {
-                            text: qsTr("Change…")
-                            onClicked: folderDialog.open()
-                        }
-                    }
-
-                    Hint {
-                        text: qsTr("Every music file in this folder and its subfolders shows up in the library. Finished Soulseek downloads are moved here, converted first to the format picked on the Soulseek page (M4A 320 kbps by default); a converted original goes to the Recycle Bin.")
                     }
                 }
 

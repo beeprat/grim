@@ -4,8 +4,9 @@ import QtCore
 import QtQuick
 import MusicPlayer
 
-// Effect settings (Settings → Effects, and the effects popup by the volume), remembered between
-// runs and handed to the player as heard. One instance, so both places stay in step.
+// Effect settings (the effects popup by the volume), remembered between runs and handed to the
+// player as heard. They apply only while Settings → Effects → "Show effects button" is on, the only
+// place they can be turned off.
 QtObject {
     id: effects
 
@@ -34,16 +35,16 @@ QtObject {
     property Binding speedBinding: Binding {
         target: PlayerController
         property: "speed"
-        value: effects.slowed ? effects.slowedSpeed : 1
+        value: effects.showInNowPlaying && effects.slowed ? effects.slowedSpeed : 1
     }
     property Binding reverbBinding: Binding {
         target: PlayerController
         property: "reverb"
-        value: effects.reverb ? effects.reverbAmount : 0
+        value: effects.showInNowPlaying && effects.reverb ? effects.reverbAmount : 0
     }
     property Binding pitchBinding: Binding {
         target: PlayerController
         property: "pitchSemitones"
-        value: effects.pitch ? effects.pitchSemitones : 0
+        value: effects.showInNowPlaying && effects.pitch ? effects.pitchSemitones : 0
     }
 }

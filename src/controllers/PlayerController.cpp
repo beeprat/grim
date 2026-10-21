@@ -1,5 +1,6 @@
 #include "controllers/PlayerController.h"
 
+#include "core/LibraryDatabase.h"
 #include "core/LyricsFetcher.h"
 #include "core/TagReader.h"
 #include "providers/CoverImageProvider.h"
@@ -169,6 +170,28 @@ void PlayerController::setCrossfadeMs(int ms)
     m_crossfadeMs = std::max(ms, 0);
     if (m_crossfadeMs > 0) // crossfade replaces gapless: drop a track queued for a hard cut
         m_engine.cancelQueued();
+}
+
+void PlayerController::setReplayGainMode(int mode)
+{
+    m_replayGainMode = mode;
+    refreshReplayGain();
+}
+
+void PlayerController::setSongModes(const LibraryDatabase *songModes)
+{
+    m_songModes = songModes;
+}
+
+float PlayerController::replayGainFactor(const QString &path, const ReplayGain::Info &info) const
+{
+    const int songMode = m_songModes ? m_songModes->replayGainMode(path) : ReplayGain::Default;
+    return ReplayGain::factor(info, songMode == ReplayGain::Default ? m_replayGainMode : songMode);
+}
+
+void PlayerController::refreshReplayGain()
+{
+    m_engine.setTrackGain(replayGainFactor(m_track.path, m_replayGain));
 }
 
 void PlayerController::loadLyrics()
@@ -449,6 +472,8 @@ void PlayerController::playAt(int orderPosition, int crossfadeMs, bool autoplay)
 void PlayerController::trackLoaded(const QString &path)
 {
     m_track = TagReader::read(path);
+    m_replayGain = ReplayGain::read(path);
+    refreshReplayGain(); // a gapless track got the same gain when it was queued
     // The decoder's frame count is exact; TagLib's is an estimate for VBR MP3.
     if (const qint64 decodedMs = m_engine.durationMs(); decodedMs > 0)
         m_track.durationMs = decodedMs;
@@ -468,7 +493,8 @@ void PlayerController::queueNextIfDue(qint64 positionMs)
         || m_track.durationMs <= 0 || positionMs < m_track.durationMs - kQueueAheadMs)
         return;
     m_queueTried = true;
-    m_engine.queueNext(QFileInfo(m_queue.value(m_order.at(m_orderPosition + 1))).filesystemFilePath());
+    const QString next = m_queue.value(m_order.at(m_orderPosition + 1));
+    m_engine.queueNext(QFileInfo(next).filesystemFilePath(), replayGainFactor(next, ReplayGain::read(next)));
 }
 
 void PlayerController::togglePlay()

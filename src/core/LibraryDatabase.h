@@ -34,6 +34,9 @@ public:
     bool isFavorite(const QString &path) const;
     bool setFavorite(const QString &path, bool favorite);
     QStringList favorites() const; // most recently favorited first
+    // The song's own ReplayGain choice (ReplayGain::Mode); Default = follow the setting.
+    int replayGainMode(const QString &path) const;
+    bool setReplayGainMode(const QString &path, int mode);
 
     QList<Playlist> playlists() const; // by name
     qint64 createPlaylist(const QString &name, const QStringList &paths); // 0 on failure
@@ -48,6 +51,7 @@ private:
     {
         int rating = 0;
         bool favorite = false;
+        int replayGain = -1; // ReplayGain::Default
     };
 
     QSqlDatabase database() const;

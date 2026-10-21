@@ -29,6 +29,7 @@ class SettingsController : public QObject
     Q_PROPERTY(bool onlineLyrics READ onlineLyrics WRITE setOnlineLyrics NOTIFY onlineLyricsChanged FINAL)
     // Seconds the end of a track overlaps the next one; 0 = off.
     Q_PROPERTY(double crossfadeSeconds READ crossfadeSeconds WRITE setCrossfadeSeconds NOTIFY crossfadeSecondsChanged FINAL)
+    Q_PROPERTY(int replayGain READ replayGain WRITE setReplayGain NOTIFY replayGainChanged FINAL)
     // Disk space used by album cover thumbnails, artist photos and online lyrics, in bytes. Re-read on
     // refreshCacheSize() and after clearCache().
     Q_PROPERTY(qint64 cacheBytes READ cacheBytes NOTIFY cacheChanged FINAL)
@@ -56,6 +57,9 @@ public:
     // 0 (off) to 12 s, in tenths of a second.
     double crossfadeSeconds() const;
     void setCrossfadeSeconds(double seconds);
+    // ReplayGain::Off/Track/Album; Track by default.
+    int replayGain() const;
+    void setReplayGain(int mode);
 
     QString language() const;
     void setLanguage(const QString &language);
@@ -82,6 +86,7 @@ signals:
     void languageChanged();
     void onlineLyricsChanged();
     void crossfadeSecondsChanged();
+    void replayGainChanged();
     void languagesChanged();
     void cacheChanged();
     // The installed translation changed; main.cpp calls QQmlEngine::retranslate().
@@ -96,6 +101,7 @@ private:
     bool m_minimizeToTray = false;
     bool m_onlineLyrics = true;
     double m_crossfadeSeconds = 0;
+    int m_replayGain = 1;
     QString m_language;
     QStringList m_languages;
     StringsTranslator m_translator;

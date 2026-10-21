@@ -30,7 +30,7 @@ public:
     // Gapless playback: loads `file` and schedules it to start on the exact frame the
     // current track ends. Only while playing, with a known track length and no crossfade
     // running. Cancelled by load(), pause(), seek() and cancelQueued().
-    bool queueNext(const std::filesystem::path &file);
+    bool queueNext(const std::filesystem::path &file, float gain = 1.0f);
     bool hasQueued() const;
     void cancelQueued();
     // The current track has ended and the queued one took over: makes it the current track.
@@ -51,6 +51,8 @@ public:
 
     // Master output volume, linear 0..1. Per-track gain (ReplayGain) is separate.
     void setVolume(float volume);
+    // ReplayGain of the current track, linear (1 = unchanged). A new track starts at 1.
+    void setTrackGain(float gain);
 
     // Effects, applied to everything that plays. Speed resamples (1 = normal, 0.8 = slower and
     // lower, like a slowed-down record); reverb 0..1; pitch in semitones with tempo unchanged.

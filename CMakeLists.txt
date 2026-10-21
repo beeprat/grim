@@ -113,6 +113,8 @@ add_library(musicplayer_core STATIC
     src/core/KeyFile.cpp
     src/core/Lyrics.h
     src/core/Lyrics.cpp
+    src/core/ReplayGain.h
+    src/core/ReplayGain.cpp
     src/core/LyricsFetcher.h
     src/core/LyricsFetcher.cpp
     src/core/ArtistImageFetcher.h
@@ -401,6 +403,13 @@ qt_add_executable(tst_lyrics tests/tst_lyrics.cpp)
 target_link_libraries(tst_lyrics PRIVATE musicplayer_core tag Qt6::Test musicplayer_warnings)
 add_test(NAME tst_lyrics COMMAND tst_lyrics)
 set_tests_properties(tst_lyrics PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_replaygain tests/tst_replaygain.cpp)
+# Links TagLib directly to write ReplayGain tags into its fixture.
+target_link_libraries(tst_replaygain PRIVATE musicplayer_core tag Qt6::Test musicplayer_warnings)
+add_test(NAME tst_replaygain COMMAND tst_replaygain)
+set_tests_properties(tst_replaygain PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_userdatamigration tests/tst_userdatamigration.cpp)

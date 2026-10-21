@@ -79,12 +79,18 @@ private slots:
             QVERIFY(db.open(file));
             QVERIFY(db.setRating(u"x"_s, 5));
             QVERIFY(db.setFavorite(u"x"_s, true));
+            QVERIFY(db.setReplayGainMode(u"x"_s, 2));
+            QVERIFY(!db.setReplayGainMode(u"x"_s, 3)); // not a mode
+            QVERIFY(db.setRating(u"y"_s, 1));
             QVERIFY(db.createPlaylist(u"P"_s, {u"x"_s}) > 0);
         }
         LibraryDatabase db;
         QVERIFY(db.open(file));
         QCOMPARE(db.rating(u"x"_s), 5); // loaded into the cache on open
         QVERIFY(db.isFavorite(u"x"_s));
+        QCOMPARE(db.replayGainMode(u"x"_s), 2);
+        QCOMPARE(db.rating(u"x"_s), 5); // the ReplayGain write kept the rating
+        QCOMPARE(db.replayGainMode(u"y"_s), -1); // follows the setting
         QCOMPARE(db.playlistTracks(db.playlists().first().id), QStringList{u"x"_s});
     }
 };

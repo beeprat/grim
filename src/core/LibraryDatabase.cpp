@@ -12,7 +12,7 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 std::atomic<int> s_connectionCounter{0};
 
@@ -68,10 +68,11 @@ bool LibraryDatabase::open(const QString &filePath)
     if (!migrate())
         return false;
 
-    if (!query.exec(u"SELECT path, rating, favorite FROM track_meta"_s))
+    if (!query.exec(u"SELECT path, rating, favorite, replaygain FROM track_meta"_s))
         return logFailure(query);
     while (query.next())
-        m_meta.insert(query.value(0).toString(), {query.value(1).toInt(), query.value(2).toBool()});
+        m_meta.insert(query.value(0).toString(),
+                      {query.value(1).toInt(), query.value(2).toBool(), query.value(3).toInt()});
     return true;
 }
 
@@ -117,6 +118,10 @@ bool LibraryDatabase::migrate()
                     path        TEXT    NOT NULL,
                     PRIMARY KEY (playlist_id, position)
                 ))"_s,
+        },
+        // 1 -> 2: per-song ReplayGain mode, -1 = follow the setting
+        {
+            u"ALTER TABLE track_meta ADD COLUMN replaygain INTEGER NOT NULL DEFAULT -1 CHECK (replaygain BETWEEN -1 AND 2)"_s,
         },
     };
 
@@ -167,19 +172,35 @@ bool LibraryDatabase::setFavorite(const QString &path, bool favorite)
     return saveMeta(path, meta);
 }
 
+int LibraryDatabase::replayGainMode(const QString &path) const
+{
+    return m_meta.value(path).replayGain;
+}
+
+bool LibraryDatabase::setReplayGainMode(const QString &path, int mode)
+{
+    if (path.isEmpty() || mode < -1 || mode > 2)
+        return false;
+    Meta meta = m_meta.value(path);
+    meta.replayGain = mode;
+    return saveMeta(path, meta);
+}
+
 bool LibraryDatabase::saveMeta(const QString &path, const Meta &meta)
 {
     QSqlQuery query(database());
-    query.prepare(uR"(INSERT INTO track_meta (path, rating, favorite, favorited_at) VALUES (?, ?, ?, ?)
+    query.prepare(uR"(INSERT INTO track_meta (path, rating, favorite, favorited_at, replaygain) VALUES (?, ?, ?, ?, ?)
                       ON CONFLICT(path) DO UPDATE SET
                           rating = excluded.rating,
                           favorite = excluded.favorite,
+                          replaygain = excluded.replaygain,
                           favorited_at = CASE WHEN excluded.favorite AND NOT track_meta.favorite
                                               THEN excluded.favorited_at ELSE track_meta.favorited_at END)"_s);
     query.addBindValue(path);
     query.addBindValue(meta.rating);
     query.addBindValue(meta.favorite ? 1 : 0);
     query.addBindValue(QDateTime::currentSecsSinceEpoch());
+    query.addBindValue(meta.replayGain);
     if (!query.exec())
         return logFailure(query);
     m_meta.insert(path, meta);

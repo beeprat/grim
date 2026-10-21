@@ -170,6 +170,22 @@ void LibraryController::setRating(const QUrl &fileUrl, int stars)
     }
 }
 
+int LibraryController::replayGainMode(const QUrl &fileUrl) const
+{
+    return m_database.replayGainMode(fileUrl.toLocalFile());
+}
+
+void LibraryController::setReplayGainMode(const QList<QUrl> &fileUrls, int mode)
+{
+    bool changed = false;
+    for (const QUrl &url : fileUrls)
+        changed = m_database.setReplayGainMode(url.toLocalFile(), mode) || changed;
+    if (changed) {
+        ++m_metaRevision;
+        emit metaChanged();
+    }
+}
+
 bool LibraryController::isFavorite(const QUrl &fileUrl) const
 {
     return m_database.isFavorite(fileUrl.toLocalFile());

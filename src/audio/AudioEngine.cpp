@@ -226,7 +226,7 @@ void AudioEngine::update()
         outgoing.unload();
 }
 
-bool AudioEngine::queueNext(const std::filesystem::path &file)
+bool AudioEngine::queueNext(const std::filesystem::path &file, float gain)
 {
     if (m_impl->queued || !isPlaying())
         return false;
@@ -240,6 +240,7 @@ bool AudioEngine::queueNext(const std::filesystem::path &file)
     next.unload(); // a finished crossfade-out not yet freed by update()
     if (!m_impl->open(next, file))
         return false;
+    ma_sound_set_volume(&next.sound, gain);
 
     // The engine clock and the track's cursor both advance on the mixing thread; read them
     // between two mixes (same clock before and after) so they describe the same moment.
@@ -355,6 +356,12 @@ void AudioEngine::setVolume(float volume)
 {
     if (m_impl->engineReady)
         ma_engine_set_volume(&m_impl->engine, std::clamp(volume, 0.0f, 1.0f));
+}
+
+void AudioEngine::setTrackGain(float gain)
+{
+    if (m_impl->active().loaded)
+        ma_sound_set_volume(&m_impl->active().sound, gain);
 }
 
 void AudioEngine::setSpeed(float speed)

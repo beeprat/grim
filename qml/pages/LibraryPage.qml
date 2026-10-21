@@ -412,9 +412,8 @@ Item {
 
                 // Title with the album/track count under it, left edges lined up.
                 ColumnLayout {
-                    // Line up with the album covers, which sit inside the tiles' 8 px padding
-                    // (plus the gap beside each tile in a wide grid).
-                    Layout.leftMargin: 8 + (viewSettings.albums ? albumGrid.sideGap : 0)
+                    // Same spot in the album grid and the track list, so switching views doesn't move it.
+                    Layout.leftMargin: 8
                     spacing: 0
 
                     RowLayout {
