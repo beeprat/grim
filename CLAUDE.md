@@ -131,7 +131,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   op + int32 LE length + JSON. Updates debounced 1.5 s. Covers uploaded to imgur, keyed by sha1 of the JPEG.
 - Lyrics: tag / sidecar `.lrc`, then cache, then LRCLIB (`/api/get`, then `/api/search`). `lyricIndex` updates only
   while the lyrics panel is visible (`PlayerController.lyricsShown`).
-- Media keys: `RegisterHotKey` (`controllers/MediaKeys`) on Windows, `controllers/Mpris` on Linux.
+- Media keys: `RegisterHotKey` (`controllers/MediaKeys`) on Windows, `controllers/Mpris` on Linux. `MediaKeys` also
+  adds the taskbar thumbnail buttons (previous / play-pause / next, `ITaskbarList3`), re-added on every
+  `TaskbarButtonCreated` (first show, back from the tray, Explorer restart); clicks arrive as `WM_COMMAND`.
 - Single instance: `QLocalSocket`/`QLocalServer` named `grimPlayer-<user>`; a second start hands over its file
   argument and exits before touching data.
 
