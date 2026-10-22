@@ -86,6 +86,9 @@ public:
     QVariantList lyrics() const;
     bool lyricsSynced() const;
     bool lyricsLoading() const;
+    // Remembers volume, shuffle, repeat, and the queue, track and position for restoreLastTrack().
+    // Runs on quit, and from main.cpp when Windows shuts down or logs off.
+    void saveLastTrack() const;
     // Look up lyrics on lrclib.net when the file has none (Settings → Lyrics).
     void setOnlineLyrics(bool enabled);
     // Overlap at automatic track changes, in ms; 0 = off (Settings → Playback).
@@ -161,8 +164,6 @@ private:
     void trackLoaded(const QString &path);
     // Gapless: near the end of a track, has the engine queue the next one.
     void queueNextIfDue(qint64 positionMs);
-    // Remembers volume, shuffle, repeat, and the queue, track and position for restoreLastTrack().
-    void saveLastTrack() const;
     // next() with an optional crossfade; false at the end of the queue without repeat.
     bool advance(int crossfadeMs);
     // Rebuilds the play order; with shuffle the current track stays first.

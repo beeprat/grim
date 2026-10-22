@@ -95,7 +95,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Key files (`core/KeyFile`, `key = value`, `#` comments): `lastfm.txt` (`api_key`, `shared_secret`), `discord.txt`
   (`application_id`, `imgur_client_id`; empty values fall back to `kDefaultApplicationId`/`kDefaultImgurClientId`).
 - `scrobble-queue.json`, `imgur-covers.json`, `translations/<Language>.txt` (`"English" = "Translated";`).
-- QSettings: `player/volume|shuffle|repeat` and `player/last*` (queue, track, position) saved on quit;
+- QSettings: `player/volume|shuffle|repeat` and `player/last*` (queue, track, position) saved on quit and on
+  `QGuiApplication::commitDataRequest` (Windows shutdown/logoff may kill the process before destructors run);
   `slskd/serverUrl|apiKey` (plain text), `slskd/downloadFormat`, `playback/crossfadeSeconds|replayGain`, `library/*`,
   `layout/grid`. QML-side settings use QtCore `Settings` categories (`theme`, `effects`, `library`, `nowPlaying`).
 

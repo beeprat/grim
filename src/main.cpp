@@ -144,6 +144,9 @@ int main(int argc, char *argv[])
     Mpris mpris(playerController,
                 QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/covers"));
 #endif
+    // Windows may end the process at shutdown/logoff before destructors run: save while it still asks.
+    QObject::connect(&app, &QGuiApplication::commitDataRequest, &playerController,
+                     [&] { playerController.saveLastTrack(); }, Qt::DirectConnection);
     // Plays not yet accepted by Last.fm survive restarts in this file.
     LastFmController lastFm(dataDir + QStringLiteral("/scrobble-queue.json"), dataDir + QStringLiteral("/lastfm.txt"));
     playerController.setScrobbleAfterMs(LastFmController::kScrobbleAfterMs);
