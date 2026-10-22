@@ -63,21 +63,8 @@ Card {
     }
 
     EdgeFade {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: 16
-        atTop: true
-        height: 28
         flickable: lyrics
-    }
-
-    EdgeFade {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 16
         // The card is short; a quarter of it keeps the fade from eating the lyrics.
-        height: Math.min(100, parent.height / 4)
-        flickable: lyrics
+        bottomHeight: Math.min(100, lyrics.height / 4)
     }
 }

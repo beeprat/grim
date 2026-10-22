@@ -621,20 +621,6 @@ Item {
 
         // Fades at the top once scrolled and at the bottom, as in the library.
         EdgeFade {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            atTop: true
-            height: 28
-            baseColor: Theme.backgroundImage === "" ? Theme.window : "transparent" // panels sit on the window background here
-            flickable: settingsFlick
-        }
-
-        EdgeFade {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 100
-            baseColor: Theme.backgroundImage === "" ? Theme.window : "transparent"
             flickable: settingsFlick
         }
     }

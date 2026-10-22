@@ -144,23 +144,9 @@ Card {
         }
     }
 
-    // Rows fade into the card at the top once scrolled and at the bottom (each hidden at that end
-    // of the list), as in the library.
+    // Rows fade out at the top once scrolled and at the bottom, as in the library.
     EdgeFade {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: 16
-        atTop: true
-        height: 28
         flickable: list
-    }
-
-    EdgeFade {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 16
-        height: Math.min(100, parent.height / 4)
-        flickable: list
+        bottomHeight: Math.min(100, list.height / 4)
     }
 }

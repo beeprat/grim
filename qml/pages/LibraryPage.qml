@@ -831,24 +831,10 @@ Item {
             }
         }
 
-        // Lists and the grid fade out into the card at the bottom instead of a hard cut,
-        // and slightly at the top once scrolled.
+        // Lists and the grid fade out at the bottom instead of a hard cut, and slightly at the top once scrolled.
         EdgeFade {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: 16
-            atTop: true
-            height: 28
             flickable: page.openAlbum >= 0 ? albumTracks : page.genreList ? genreList : viewSettings.albums ? albumGrid : trackList
-        }
-
-        EdgeFade {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: 16
-            height: 140
-            flickable: page.openAlbum >= 0 ? albumTracks : page.genreList ? genreList : viewSettings.albums ? albumGrid : trackList
+            bottomHeight: 140
         }
     }
 }
