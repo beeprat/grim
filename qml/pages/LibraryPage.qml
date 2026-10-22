@@ -702,10 +702,45 @@ Item {
                     anchors.margins: 16
                     spacing: 16
 
+                    // Hovering the cover offers the way back (same as Escape).
                     CoverArt {
+                        id: albumPageCover
+
                         Layout.preferredWidth: 160
                         Layout.preferredHeight: 160
                         source: page.openAlbumCover
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: albumPageCover.radius
+                            color: Qt.rgba(0, 0, 0, 0.5)
+                            opacity: backHover.hovered ? 1 : 0
+                            Behavior on opacity {
+                                NumberAnimation { duration: 120 }
+                            }
+
+                            Image {
+                                anchors.centerIn: parent
+                                width: 48
+                                height: 48
+                                sourceSize: Qt.size(96, 96)
+                                source: "../icons/back.svg"
+                            }
+                        }
+
+                        HoverHandler {
+                            id: backHover
+
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        TapHandler {
+                            onTapped: page.openAlbum = -1
+                        }
+
+                        ToolTip.text: qsTr("Back")
+                        ToolTip.visible: backHover.hovered
+                        ToolTip.delay: 600
                     }
 
                     ColumnLayout {

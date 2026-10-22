@@ -250,6 +250,7 @@ qt_add_qml_module(MusicPlayer
         qml/pages/StatisticsPage.qml
     RESOURCES
         qml/icons/app.svg
+        qml/icons/back.svg
         qml/icons/lyrics.svg
         qml/icons/close.svg
         qml/icons/add.svg
