@@ -1,5 +1,6 @@
 #include "core/UpdateCheck.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVersionNumber>
@@ -18,7 +19,14 @@ std::optional<Release> parse(const QByteArray &json)
         || release.value(QLatin1String("prerelease")).toBool() || page.scheme() != QLatin1String("https")
         || page.host() != QLatin1String("github.com"))
         return std::nullopt;
-    return Release{tag, page};
+    QUrl installer;
+    for (const QJsonValue &asset : release.value(QLatin1String("assets")).toArray()) {
+        const QString url = asset.toObject().value(QLatin1String("browser_download_url")).toString();
+        if (asset.toObject().value(QLatin1String("name")).toString() == QLatin1String("grim-setup.exe")
+            && url.startsWith(QLatin1String("https://github.com/beeprat/grim/releases/download/")))
+            installer = QUrl(url);
+    }
+    return Release{tag, page, installer};
 }
 
 bool isNewer(const QString &latest, const QString &current)

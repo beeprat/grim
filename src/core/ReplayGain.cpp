@@ -43,20 +43,6 @@ std::optional<double> parseNumber(const QString &text)
     return match.captured(1).replace(QLatin1Char(','), QLatin1Char('.')).toDouble();
 }
 
-float factor(const Info &info, int mode)
-{
-    if (mode != Track && mode != Album)
-        return 1.0f;
-    const bool album = mode == Album ? info.albumGainDb.has_value() : !info.trackGainDb.has_value();
-    const std::optional<double> gainDb = album ? info.albumGainDb : info.trackGainDb;
-    if (!gainDb)
-        return 1.0f;
-    double gain = fromDb(*gainDb);
-    if (const std::optional<double> peak = album ? info.albumPeak : info.trackPeak; peak && *peak > 0)
-        gain = std::min(gain, 1.0 / *peak);
-    return static_cast<float>(gain);
-}
-
 float fromDb(double db)
 {
     return static_cast<float>(std::pow(10.0, db / 20.0));

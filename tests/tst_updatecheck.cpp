@@ -28,6 +28,23 @@ private slots:
         QVERIFY(release);
         QCOMPARE(release->version, u"0.1.2"_s);
         QCOMPARE(release->pageUrl, QUrl(u"https://github.com/beeprat/grim/releases/tag/v0.1.2"_s));
+        QVERIFY(release->installerUrl.isEmpty()); // no assets listed
+    }
+
+    void takesInstallerOnlyFromThisRepository()
+    {
+        const auto release = UpdateCheck::parse(
+            "{\"tag_name\":\"v0.1.3\",\"html_url\":\"https://github.com/beeprat/grim/releases/tag/v0.1.3\","
+            "\"assets\":[{\"name\":\"GRIM-win64.7z\",\"browser_download_url\":\"https://github.com/beeprat/grim/releases/download/v0.1.3/GRIM-win64.7z\"},"
+            "{\"name\":\"grim-setup.exe\",\"browser_download_url\":\"https://github.com/beeprat/grim/releases/download/v0.1.3/grim-setup.exe\"}]}");
+        QVERIFY(release);
+        QCOMPARE(release->installerUrl, QUrl(u"https://github.com/beeprat/grim/releases/download/v0.1.3/grim-setup.exe"_s));
+
+        const auto elsewhere = UpdateCheck::parse(
+            "{\"tag_name\":\"v0.1.3\",\"html_url\":\"https://github.com/beeprat/grim/releases/tag/v0.1.3\","
+            "\"assets\":[{\"name\":\"grim-setup.exe\",\"browser_download_url\":\"https://example.com/grim-setup.exe\"}]}");
+        QVERIFY(elsewhere);
+        QVERIFY(elsewhere->installerUrl.isEmpty());
     }
 
     void rejectsOddAnswers()

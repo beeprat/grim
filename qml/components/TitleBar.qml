@@ -143,7 +143,7 @@ Rectangle {
         onDoubleTapped: bar.maximized ? bar.window.showNormal() : bar.window.showMaximized()
     }
 
-    // A newer release on GitHub (checked at startup): opens its download page.
+    // A newer release on GitHub (checked at startup): click to download and install it (UpdateController.install).
     AbstractButton {
         id: updateNote
 
@@ -153,18 +153,27 @@ Rectangle {
         hoverEnabled: true
         leftPadding: 12
         rightPadding: 12
-        onClicked: Qt.openUrlExternally(UpdateController.downloadUrl)
+        onClicked: UpdateController.install()
 
-        ToolTip.visible: hovered
+        ToolTip.visible: hovered && UpdateController.state === UpdateController.Available
         ToolTip.delay: 300
-        ToolTip.text: qsTr("Open the download page on GitHub")
+        ToolTip.text: qsTr("Download and install it; grim. restarts by itself")
 
         background: Rectangle {
             radius: height / 2
             color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, updateNote.hovered ? 0.35 : 0.2)
         }
         contentItem: Label {
-            text: qsTr("grim. %1 is available").arg(UpdateController.latestVersion)
+            text: {
+                switch (UpdateController.state) {
+                case UpdateController.Downloading:
+                    return qsTr("Downloading grim. %1… %2%").arg(UpdateController.latestVersion)
+                                                          .arg(Math.round(UpdateController.progress * 100))
+                case UpdateController.Installing: return qsTr("Installing…")
+                case UpdateController.Failed: return qsTr("Update failed: click to open the download page")
+                }
+                return qsTr("grim. %1 is available: click to update").arg(UpdateController.latestVersion)
+            }
             font.pixelSize: 12
             verticalAlignment: Text.AlignVCenter
         }

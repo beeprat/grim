@@ -1,6 +1,7 @@
 import QtCore
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 // Importing the Material module directly selects the style at compile time.
 import QtQuick.Controls.Material
 import MusicPlayer
@@ -646,6 +647,33 @@ ApplicationWindow {
     Material.background: Theme.card // popups, menus, combo box lists
     color: Theme.window
 
+    // Settings → Appearance → Background image: blurred and darkened behind the (see-through) panels.
+    background: Rectangle {
+        color: Theme.window
+
+        Image {
+            id: wallpaper
+
+            anchors.fill: parent
+            source: Theme.backgroundImage
+            visible: false // drawn by the blur below
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            // Blurred anyway: a small decode keeps memory and the blur cheap.
+            sourceSize: Qt.size(960, 960)
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            source: wallpaper
+            visible: Theme.backgroundImage !== "" && wallpaper.status === Image.Ready
+            blurEnabled: true
+            blur: 1
+            blurMax: 64
+            brightness: -0.25
+        }
+    }
+
     // Opens the shared right-click menu for these tracks (one track, or an album's tracks).
     // Pages reach it through ApplicationWindow.window.openTrackMenu().
     function openTrackMenu(fileUrls, isAlbum) {
@@ -693,7 +721,7 @@ ApplicationWindow {
         onGainRequested: (fileUrls) => gainDialog.ask(fileUrls)
     }
 
-    // A song's own volume in dB, replacing its ReplayGain tags (LibraryController.setReplayGainDb).
+    // A song's own volume in dB (LibraryController.setReplayGainDb); the file's ReplayGain tag is shown as a hint.
     Dialog {
         id: gainDialog
 
@@ -704,7 +732,7 @@ ApplicationWindow {
             urls = fileUrls
             tagDb = LibraryController.tagGainDb(fileUrls[0])
             const own = LibraryController.replayGainDb(fileUrls[0])
-            gainSlider.value = !isNaN(own) ? own : !isNaN(tagDb) ? tagDb : 0
+            gainSlider.value = !isNaN(own) ? own : 0
             open()
         }
 
@@ -755,9 +783,8 @@ ApplicationWindow {
                 wrapMode: Text.Wrap
                 opacity: 0.6
                 font.pixelSize: 12
-                text: (isNaN(gainDialog.tagDb) ? qsTr("No ReplayGain tag in the file.")
-                                              : qsTr("ReplayGain tag: %1.").arg(gainDialog.dbText(gainDialog.tagDb)))
-                      + " " + qsTr("Reset goes back to the tags and the ReplayGain setting.")
+                text: (isNaN(gainDialog.tagDb) ? "" : qsTr("The file's ReplayGain tag suggests %1.").arg(gainDialog.dbText(gainDialog.tagDb)) + " ")
+                      + qsTr("Reset removes the adjustment.")
             }
         }
     }

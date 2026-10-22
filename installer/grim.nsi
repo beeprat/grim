@@ -53,7 +53,25 @@ Function CreateDesktopShortcut
     CreateShortcut "$DESKTOP\${AppName}.lnk" "$INSTDIR\${AppExe}"
 FunctionEnd
 
+; Started by grim.'s update note with /S: start the new version once it is in place.
+Function .onInstSuccess
+    IfSilent 0 +2
+    Exec '"$INSTDIR\${AppExe}"'
+FunctionEnd
+
 Section
+    ; grim. quits right after starting an update: wait (up to 10 s) until its exe can be removed.
+    StrCpy $0 0
+    waitForExit:
+    IfFileExists "$INSTDIR\${AppExe}" 0 exited
+    ClearErrors
+    Delete "$INSTDIR\${AppExe}"
+    IfErrors 0 exited
+    IntOp $0 $0 + 1
+    IntCmp $0 40 exited
+    Sleep 250
+    Goto waitForExit
+    exited:
     ; An update replaces the whole folder, so files a newer version no longer ships do not linger.
     RMDir /r "$INSTDIR"
     SetOutPath "$INSTDIR"

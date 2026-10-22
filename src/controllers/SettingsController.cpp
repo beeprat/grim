@@ -1,11 +1,13 @@
 #include "controllers/SettingsController.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QJSEngine>
 #include <QRegularExpression>
 #include <QSettings>
@@ -23,7 +25,6 @@ const auto kMinimizeToTrayKey = "window/minimizeToTray"_L1;
 const auto kLanguageKey = "ui/language"_L1;
 const auto kOnlineLyricsKey = "lyrics/fetchOnline"_L1;
 const auto kCrossfadeKey = "playback/crossfadeSeconds"_L1;
-const auto kReplayGainKey = "playback/replayGain"_L1;
 constexpr double kMaxCrossfadeSeconds = 12;
 
 // Tenths of a second within 0..12: the slider's precision, and what gets stored.
@@ -59,7 +60,6 @@ SettingsController::SettingsController(QObject *parent)
     m_language = settings.value(kLanguageKey).toString();
     m_onlineLyrics = settings.value(kOnlineLyricsKey, true).toBool();
     m_crossfadeSeconds = roundedCrossfade(settings.value(kCrossfadeKey, 0).toDouble()); // older versions stored whole seconds
-    m_replayGain = std::clamp(settings.value(kReplayGainKey, 1).toInt(), 0, 2);
 
     QDir().mkpath(translationsFolder());
     reloadLanguages();
@@ -123,6 +123,23 @@ void SettingsController::clearCache()
     emit cacheChanged();
 }
 
+QString SettingsController::importBackground(const QUrl &imageUrl)
+{
+    const QString source = imageUrl.toLocalFile();
+    if (!source.isEmpty() && QImageReader(source).format().isEmpty())
+        return {}; // not a picture Qt can read: keep the current one
+    const QDir data(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    const QString name = source.isEmpty() ? QString()
+                                          : u"background-%1.%2"_s.arg(QDateTime::currentMSecsSinceEpoch())
+                                                .arg(QFileInfo(source).suffix().toLower());
+    if (!name.isEmpty() && !QFile::copy(source, data.filePath(name)))
+        return {}; // the current picture stays
+    for (const QString &old : data.entryList({u"background-*"_s}, QDir::Files))
+        if (old != name)
+            QFile::remove(data.filePath(old));
+    return name.isEmpty() ? QString() : QUrl::fromLocalFile(data.filePath(name)).toString();
+}
+
 void SettingsController::setLibraryFolder(const QUrl &folderUrl)
 {
     const QString folder = QDir::cleanPath(folderUrl.toLocalFile());
@@ -165,21 +182,6 @@ void SettingsController::setCrossfadeSeconds(double seconds)
     m_crossfadeSeconds = seconds;
     QSettings().setValue(kCrossfadeKey, seconds);
     emit crossfadeSecondsChanged();
-}
-
-int SettingsController::replayGain() const
-{
-    return m_replayGain;
-}
-
-void SettingsController::setReplayGain(int mode)
-{
-    mode = std::clamp(mode, 0, 2);
-    if (mode == m_replayGain)
-        return;
-    m_replayGain = mode;
-    QSettings().setValue(kReplayGainKey, mode);
-    emit replayGainChanged();
 }
 
 QString SettingsController::language() const

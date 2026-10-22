@@ -390,7 +390,7 @@ Item {
     Card {
         anchors.fill: parent
         // The album page brings its own two cards (info, tracks); this one steps back.
-        color: page.openAlbum >= 0 ? "transparent" : Theme.card
+        color: page.openAlbum >= 0 ? "transparent" : Theme.panel
 
         // Browsing: albums as a grid, or tracks as a list.
         ColumnLayout {
@@ -720,11 +720,30 @@ Item {
                             elide: Text.ElideRight
                         }
 
+                        // Like the now-playing card: the name opens all of this artist's albums.
                         Label {
                             Layout.fillWidth: true
                             text: page.openAlbumArtist || qsTr("Unknown artist")
-                            opacity: 0.7
+                            opacity: albumArtistMouse.containsMouse ? 1 : 0.7
                             font.pixelSize: 15
+                            font.underline: albumArtistMouse.containsMouse
+                            elide: Text.ElideRight
+
+                            MouseArea {
+                                id: albumArtistMouse
+
+                                // Only over the name, not the empty rest of the line.
+                                width: Math.min(parent.contentWidth, parent.width)
+                                height: parent.height
+                                enabled: page.openAlbumArtist !== ""
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: page.showArtist(page.openAlbumArtist)
+                            }
+
+                            ToolTip.text: qsTr("Show this artist's albums")
+                            ToolTip.visible: albumArtistMouse.containsMouse
+                            ToolTip.delay: 600
                         }
 
                         Label {

@@ -105,7 +105,7 @@ Item {
             Layout.fillHeight: true
             // A shade darker than the tracks card, so the open playlist's row (in the tracks card's
             // color, joined to it by `tabBridge`) reads as a tab of that card.
-            color: Qt.darker(Theme.card, 1.6)
+            color: Qt.darker(Theme.panel, 1.6)
 
             // Drag the right edge to resize; it straddles the gap to the tracks card.
             MouseArea {
@@ -186,7 +186,7 @@ Item {
 
                         background: Rectangle {
                             radius: Math.min(Theme.radius, 10)
-                            color: entry.current ? Theme.card : entry.hovered ? Theme.hover : "transparent"
+                            color: entry.current ? Theme.panel : entry.hovered ? Theme.hover : "transparent"
                         }
 
                         contentItem: RowLayout {
@@ -432,7 +432,7 @@ Item {
         width: tracksCard.x - x + 1
         y: rowY
         height: row ? row.height : 0
-        color: Theme.card
+        color: Theme.panel
         visible: row !== null && rowY >= listTop && rowY + height <= listTop + playlistList.height
     }
 }

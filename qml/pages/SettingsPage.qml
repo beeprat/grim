@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Layouts
@@ -42,6 +43,20 @@ Item {
         font.pixelSize: 12
     }
 
+    FileDialog {
+        id: backgroundDialog
+
+        title: qsTr("Choose a background image")
+        nameFilters: [qsTr("Images (*.jpg *.jpeg *.png *.webp *.bmp *.gif)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+        onAccepted: {
+            const copy = SettingsController.importBackground(selectedFile)
+            backgroundError.text = copy === "" ? qsTr("This picture could not be used.") : ""
+            if (copy !== "")
+                Theme.backgroundImage = copy
+        }
+    }
+
     FolderDialog {
         id: folderDialog
 
@@ -78,9 +93,50 @@ Item {
                 SettingsPanel {
                     SectionTitle { text: qsTr("Appearance") }
 
-                    Label { text: qsTr("Accent"); opacity: 0.8 }
+                    Label { text: qsTr("Theme"); opacity: 0.8 }
 
-                    RowLayout {
+                    // Sets the background and accent below together.
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Repeater {
+                            model: Theme.themes
+
+                            delegate: Button {
+                                id: themeButton
+
+                                required property int index
+                                required property var modelData
+                                readonly property bool current: Theme.backgroundIndex === modelData.background
+                                                                && Theme.accentIndex === modelData.accent
+
+                                text: modelData.name
+                                onClicked: Theme.applyTheme(index)
+                                Material.background: Theme.backgrounds[modelData.background].card
+                                Material.foreground: Theme.accents[modelData.accent].color
+                                font.weight: current ? Font.DemiBold : Font.Normal
+
+                                // The accent as a dot in front of the name.
+                                leftPadding: 30
+                                Rectangle {
+                                    x: 14
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 10
+                                    height: 10
+                                    radius: 5
+                                    color: Theme.accents[themeButton.modelData.accent].color
+                                    border.width: themeButton.current ? 2 : 0
+                                    border.color: Qt.rgba(1, 1, 1, 0.8)
+                                }
+                            }
+                        }
+                    }
+
+                    Label { Layout.topMargin: 4; text: qsTr("Accent"); opacity: 0.8 }
+
+                    Flow {
+                        Layout.fillWidth: true
                         spacing: 10
 
                         Repeater {
@@ -121,7 +177,8 @@ Item {
 
                     Label { Layout.topMargin: 4; text: qsTr("Background"); opacity: 0.8 }
 
-                    RowLayout {
+                    Flow {
+                        Layout.fillWidth: true
                         spacing: 8
 
                         Repeater {
@@ -180,6 +237,39 @@ Item {
 
                     Hint {
                         text: qsTr("Ctrl + mouse wheel also changes the interface size.")
+                    }
+
+                    Label { Layout.topMargin: 4; text: qsTr("Background image"); opacity: 0.8 }
+
+                    RowLayout {
+                        spacing: 8
+
+                        Button {
+                            text: Theme.backgroundImage === "" ? qsTr("Choose…") : qsTr("Change…")
+                            onClicked: backgroundDialog.open()
+                        }
+
+                        Button {
+                            visible: Theme.backgroundImage !== ""
+                            flat: true
+                            text: qsTr("Remove")
+                            onClicked: {
+                                SettingsController.importBackground("")
+                                Theme.backgroundImage = ""
+                            }
+                        }
+
+                        Label {
+                            id: backgroundError
+
+                            visible: text !== ""
+                            color: Material.color(Material.Red, Material.Shade300)
+                            font.pixelSize: 12
+                        }
+                    }
+
+                    Hint {
+                        text: qsTr("Shown blurred behind the panels. A copy is kept with your data, so the original can be moved or deleted.")
                     }
                 }
 
@@ -301,24 +391,6 @@ Item {
 
                     Hint {
                         text: qsTr("The end of a song fades into the next one. Skipping a song by hand stays instant.")
-                    }
-
-                    RowLayout {
-                        Layout.topMargin: 4
-                        spacing: 12
-
-                        Label { text: qsTr("ReplayGain") }
-
-                        CompactComboBox {
-                            Layout.preferredWidth: 160
-                            model: [qsTr("Off"), qsTr("Track"), qsTr("Album")]
-                            currentIndex: SettingsController.replayGain
-                            onActivated: (index) => SettingsController.replayGain = index
-                        }
-                    }
-
-                    Hint {
-                        text: qsTr("Evens out loudness using the ReplayGain tags in your files (written by foobar2000, Mp3tag, beets and others). Album keeps the differences between songs of one album. Songs without tags play unchanged. Right-click a song → Volume adjustment to set its own level in dB.")
                     }
                 }
 
@@ -534,7 +606,7 @@ Item {
             anchors.right: parent.right
             atTop: true
             height: 28
-            baseColor: Theme.window // panels sit on the window background here
+            baseColor: Theme.backgroundImage === "" ? Theme.window : "transparent" // panels sit on the window background here
             flickable: settingsFlick
         }
 
@@ -543,7 +615,7 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 100
-            baseColor: Theme.window
+            baseColor: Theme.backgroundImage === "" ? Theme.window : "transparent"
             flickable: settingsFlick
         }
     }

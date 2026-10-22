@@ -2,7 +2,6 @@
 
 #include "audio/AudioEngine.h"
 #include "core/Lyrics.h"
-#include "core/ReplayGain.h"
 #include "core/StatsDatabase.h"
 #include "models/Track.h"
 
@@ -93,8 +92,7 @@ public:
     void setOnlineLyrics(bool enabled);
     // Overlap at automatic track changes, in ms; 0 = off (Settings → Playback).
     void setCrossfadeMs(int ms);
-    // ReplayGain::Off/Track/Album (Settings → Playback); a song's own dB value in `songGains` wins.
-    void setReplayGainMode(int mode);
+    // A song's own volume adjustment in dB (right-click → "Volume adjustment…") comes from `songGains`.
     void setSongGains(const LibraryDatabase *songGains);
     // Applies the current settings to the playing track again (a song's dB value changed).
     void refreshReplayGain();
@@ -202,7 +200,7 @@ private:
     qint64 m_loopEndMs = -1;
     bool loopActive() const { return m_loopStartMs >= 0 && m_loopEndMs > m_loopStartMs; }
     void applyLoop(qint64 startMs, qint64 endMs);
-    float replayGainFactor(const QString &path, const ReplayGain::Info &info) const;
+    float replayGainFactor(const QString &path) const;
     bool m_lyricsShown = true;
     double m_speed = 1;
     double m_reverb = 0;
@@ -212,9 +210,7 @@ private:
     bool m_listenReported = false; // listenedLongEnough sent for this session
     qint64 m_scrobbleAfterMs = 15000;
     int m_crossfadeMs = 0;
-    int m_replayGainMode = ReplayGain::Track;
     const LibraryDatabase *m_songGains = nullptr;
-    ReplayGain::Info m_replayGain; // of the current track
     bool m_lyricsLoading = false;
     bool m_playing = false;
     qint64 m_positionMs = 0;

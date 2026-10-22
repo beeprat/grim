@@ -87,7 +87,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   wall-clock playing time; `counted` = 30 s, or half of a track under a minute. Sessions under 1 s are not stored.
   Export/import JSON `format: grim-stats` v1; import skips plays with the same path + start time.
 - `library.sqlite` (`core/LibraryDatabase`): ratings, favorites, per-song volume adjustment in dB
-  (`replaygain_db`, NULL = tags; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
+  (`replaygain_db`, NULL = none; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
   the built-in Favorites list. Older builds refuse a newer schema (no ratings shown) rather than downgrade it.
 - `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
 - `cache/covers` (`core/CoverCache`, key path + mtime + size, `.none` = no cover), `cache/artists` (Deezer photos),
@@ -97,7 +97,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - `scrobble-queue.json`, `imgur-covers.json`, `translations/<Language>.txt` (`"English" = "Translated";`).
 - QSettings: `player/volume|shuffle|repeat` and `player/last*` (queue, track, position) saved on quit and on
   `QGuiApplication::commitDataRequest` (Windows shutdown/logoff may kill the process before destructors run);
-  `slskd/serverUrl|apiKey` (plain text), `slskd/downloadFormat`, `playback/crossfadeSeconds|replayGain`, `library/*`,
+  `slskd/serverUrl|apiKey` (plain text), `slskd/downloadFormat`, `playback/crossfadeSeconds`, `library/*`,
   `layout/grid`. QML-side settings use QtCore `Settings` categories (`theme`, `effects`, `library`, `nowPlaying`).
 
 ## Audio
@@ -106,9 +106,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   two `ma_sound` slots (current, fading/queued). Only `AudioEngine.cpp` includes `miniaudio.h`.
 - Decoders: WAV/FLAC/MP3 via miniaudio; M4A/AAC via `AacSource` = `MfAudioSource` (Media Foundation) on Windows,
   `FfmpegAudioSource` on Linux. Decoding runs on the mixing thread (documented shortcut).
-- Engine volume = user slider; per-sound volume is ReplayGain (`core/ReplayGain`: REPLAYGAIN_* tags read when a
-  track loads, peak-limited; mode Off/Track/Album from Settings → Playback). A song's own dB value (right-click →
-  "Volume adjustment…", dialog in `Main.qml`, ±20 dB) replaces the tags in every mode. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
+- Engine volume = user slider; per-sound volume is the song's own dB value (right-click → "Volume adjustment…",
+  dialog in `Main.qml`, ±20 dB, `core/ReplayGain::fromDb`), 1 without one. ReplayGain tags are not applied (removed
+  on request); the dialog only shows the tag as a hint. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
 - Effects: only in the popup by the volume, and applied only while Settings → Effects → "Show effects button" is
   on (`Effects.showInNowPlaying`). Slowed = `ma_sound_set_pitch`; Reverb (Freeverb) and Pitch (SoundTouch 2.3.3, LGPL) in one custom
   `EffectsNode`. Gapless timing and Discord timestamps divide by the speed.
@@ -143,12 +143,19 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   argument and exits before touching data.
 - Update check: `controllers/UpdateController` asks `api.github.com/repos/beeprat/grim/releases/latest` once at
   startup and compares its tag with `GRIM_VERSION` (= CMake `PROJECT_VERSION`, so bump that per release); a newer one
-  shows a pill in the middle of `TitleBar.qml` opening the release page. `core/UpdateCheck` only accepts
-  `https://github.com/...` page URLs. Failures are silent.
+  shows a pill in the middle of `TitleBar.qml`. Clicking it (`install()`) downloads the release's `grim-setup.exe`
+  (only from `github.com/beeprat/grim/releases/download/`, must start with `MZ`) to TEMP, runs it with `/S` and quits;
+  `grim.nsi` waits up to 10 s for `GRIM.exe` to be deletable, replaces the folder and (silent only) starts the new
+  version. Copies outside `%LOCALAPPDATA%\Programs\grim` (7z, Linux) and failed downloads open the release page.
+  No signature check: the trust is the same as downloading from the repo by hand. Check failures are silent.
 
 ## UI
 
-- `qml/Theme.qml` singleton: use `Theme.*`, never literal colors.
+- `qml/Theme.qml` singleton: use `Theme.*`, never literal colors. Panels use `Theme.panel` (the card color, 72 %
+  opaque when a background image is set); `Theme.card`/`Theme.window` stay opaque for popups and icon colors.
+  `themes` are presets of background + accent indexes (append to `accents`/`backgrounds`, never reorder: the
+  indexes are stored). Background image: `SettingsController::importBackground` copies it to
+  `%APPDATA%/grimPlayer/grimPlayer/background-<ms>.<ext>`; `Main.qml`'s window background blurs it (`MultiEffect`).
 - Menus: `CompactMenu`/`CompactMenuItem`/`CompactComboBox` with `PopupBackground`. One `TrackContextMenu` in `Main`,
   opened via `ApplicationWindow.window.openTrackMenu([urls])`.
 - Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings. Non-Library pages are `LazyPage` loaders.

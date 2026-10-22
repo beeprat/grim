@@ -3,5 +3,5 @@ import MusicPlayer
 
 Rectangle {
     radius: Theme.radius
-    color: Theme.card
+    color: Theme.panel
 }

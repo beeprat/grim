@@ -12,7 +12,7 @@ Rectangle {
     property Flickable flickable
     property bool atTop: false
     // What the content fades into: the card behind the list.
-    property color baseColor: Theme.card
+    property color baseColor: Theme.panel
 
     opacity: !flickable ? 0 : atTop ? (flickable.atYBeginning ? 0 : 1) : (flickable.atYEnd ? 0 : 1)
     rotation: atTop ? 180 : 0 // the same gradient, upside down
@@ -23,9 +23,10 @@ Rectangle {
     // Eased rather than linear: a straight ramp still reads as an edge where it starts.
     gradient: Gradient {
         GradientStop { position: 0; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0) }
-        GradientStop { position: 0.35; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.25) }
-        GradientStop { position: 0.65; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.65) }
-        GradientStop { position: 0.85; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.92) }
+        // Scaled by the base color's own alpha: see-through panels over a background image.
+        GradientStop { position: 0.35; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.25 * baseColor.a) }
+        GradientStop { position: 0.65; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.65 * baseColor.a) }
+        GradientStop { position: 0.85; color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, 0.92 * baseColor.a) }
         GradientStop { position: 1; color: baseColor }
     }
 

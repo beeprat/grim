@@ -54,32 +54,11 @@ private slots:
         QVERIFY(!ReplayGain::parseNumber(u"loud"_s));
     }
 
-    void picksGainForMode()
+    void convertsDb()
     {
-        ReplayGain::Info info;
-        QVERIFY(near(ReplayGain::factor(info, ReplayGain::Track), 1)); // no tags: unchanged
-
-        info.trackGainDb = -6.0;
-        info.albumGainDb = -3.0;
-        QVERIFY(near(ReplayGain::factor(info, ReplayGain::Off), 1));
-        QVERIFY(near(ReplayGain::factor(info, ReplayGain::Track), std::pow(10.0, -6.0 / 20)));
-        QVERIFY(near(ReplayGain::factor(info, ReplayGain::Album), std::pow(10.0, -3.0 / 20)));
-
-        // Each mode falls back to the other gain when its own is missing.
-        ReplayGain::Info albumOnly;
-        albumOnly.albumGainDb = -3.0;
-        QVERIFY(near(ReplayGain::factor(albumOnly, ReplayGain::Track), std::pow(10.0, -3.0 / 20)));
-        ReplayGain::Info trackOnly;
-        trackOnly.trackGainDb = -6.0;
-        QVERIFY(near(ReplayGain::factor(trackOnly, ReplayGain::Album), std::pow(10.0, -6.0 / 20)));
-    }
-
-    void peakLimitsBoost()
-    {
-        ReplayGain::Info info;
-        info.trackGainDb = 6.0; // would double the level
-        info.trackPeak = 0.8;   // but the loudest sample may only grow by 1 / 0.8
-        QVERIFY(near(ReplayGain::factor(info, ReplayGain::Track), 1.25));
+        QVERIFY(near(ReplayGain::fromDb(0), 1));
+        QVERIFY(near(ReplayGain::fromDb(-6.0), std::pow(10.0, -6.0 / 20)));
+        QVERIFY(near(ReplayGain::fromDb(20.0), 10));
     }
 
     void readsTags()

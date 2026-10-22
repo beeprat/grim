@@ -29,7 +29,6 @@ class SettingsController : public QObject
     Q_PROPERTY(bool onlineLyrics READ onlineLyrics WRITE setOnlineLyrics NOTIFY onlineLyricsChanged FINAL)
     // Seconds the end of a track overlaps the next one; 0 = off.
     Q_PROPERTY(double crossfadeSeconds READ crossfadeSeconds WRITE setCrossfadeSeconds NOTIFY crossfadeSecondsChanged FINAL)
-    Q_PROPERTY(int replayGain READ replayGain WRITE setReplayGain NOTIFY replayGainChanged FINAL)
     // Disk space used by album cover thumbnails, artist photos and online lyrics, in bytes. Re-read on
     // refreshCacheSize() and after clearCache().
     Q_PROPERTY(qint64 cacheBytes READ cacheBytes NOTIFY cacheChanged FINAL)
@@ -57,9 +56,6 @@ public:
     // 0 (off) to 12 s, in tenths of a second.
     double crossfadeSeconds() const;
     void setCrossfadeSeconds(double seconds);
-    // ReplayGain::Off/Track/Album; Track by default.
-    int replayGain() const;
-    void setReplayGain(int mode);
 
     QString language() const;
     void setLanguage(const QString &language);
@@ -80,13 +76,17 @@ public:
     // downloaded again when next needed. Covers and lyrics already in memory stay until restart.
     Q_INVOKABLE void clearCache();
 
+    // Copies a picture into the data folder (background-<time>.<ext>, so a new one is never served from
+    // the image cache) and removes the previous copies. Returns its file:// URL, or "" if it can't be read.
+    // An empty URL only removes them (Settings → Appearance → Remove).
+    Q_INVOKABLE QString importBackground(const QUrl &imageUrl);
+
 signals:
     void libraryFolderChanged();
     void minimizeToTrayChanged();
     void languageChanged();
     void onlineLyricsChanged();
     void crossfadeSecondsChanged();
-    void replayGainChanged();
     void languagesChanged();
     void cacheChanged();
     // The installed translation changed; main.cpp calls QQmlEngine::retranslate().
@@ -101,7 +101,6 @@ private:
     bool m_minimizeToTray = false;
     bool m_onlineLyrics = true;
     double m_crossfadeSeconds = 0;
-    int m_replayGain = 1;
     QString m_language;
     QStringList m_languages;
     StringsTranslator m_translator;
