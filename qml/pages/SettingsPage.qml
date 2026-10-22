@@ -593,7 +593,7 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     Layout.topMargin: -8 // right under the last card (the column spaces cards 12 px apart)
-                    text: "grim. - GRIMSIXSTAR, šarić. - 2026. - 1.0"
+                    text: "grim. - GRIMSIXSTAR, šarić. - 2026. - " + Qt.application.version // the CMake project version
                     opacity: 0.35
                     font.pixelSize: 11
                 }
