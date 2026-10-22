@@ -8,7 +8,7 @@ Unicode true
 !include "MUI2.nsh"
 
 !define AppName "grim."
-!define AppVersion "0.1.3"
+!define AppVersion "0.1.35"
 !define AppPublisher "šarić"
 !define AppExe "GRIM.exe"
 ; Same key as the Inno Setup AppId, so Windows Settings shows one entry.
