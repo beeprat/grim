@@ -155,7 +155,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   opaque when a background image is set); `Theme.card`/`Theme.window` stay opaque for popups and icon colors.
   `themes` are presets of background + accent indexes (append to `accents`/`backgrounds`, never reorder: the
   indexes are stored). Background image: `SettingsController::importBackground` copies it to
-  `%APPDATA%/grimPlayer/grimPlayer/background-<ms>.<ext>`; `Main.qml`'s window background blurs it (`MultiEffect`).
+  `%APPDATA%/grimPlayer/grimPlayer/background-<ms>.<ext>`; `Main.qml`'s window background blurs it (`MultiEffect`, `Theme.backgroundBlur` 0..1 from the Blur slider).
 - Menus: `CompactMenu`/`CompactMenuItem`/`CompactComboBox` with `PopupBackground`. One `TrackContextMenu` in `Main`,
   opened via `ApplicationWindow.window.openTrackMenu([urls])`.
 - Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings. Non-Library pages are `LazyPage` loaders.

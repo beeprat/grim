@@ -647,7 +647,8 @@ ApplicationWindow {
     Material.background: Theme.card // popups, menus, combo box lists
     color: Theme.window
 
-    // Settings → Appearance → Background image: blurred and darkened behind the (see-through) panels.
+    // Settings → Appearance → Background image: blurred (Theme.backgroundBlur) and darkened behind the
+    // see-through panels.
     background: Rectangle {
         color: Theme.window
 
@@ -667,8 +668,8 @@ ApplicationWindow {
             anchors.fill: parent
             source: wallpaper
             visible: Theme.backgroundImage !== "" && wallpaper.status === Image.Ready
-            blurEnabled: true
-            blur: 1
+            blurEnabled: Theme.backgroundBlur > 0
+            blur: Theme.backgroundBlur
             blurMax: 64
             brightness: -0.25
         }

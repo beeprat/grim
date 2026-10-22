@@ -76,6 +76,8 @@ Item {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
+            FastWheelScroll { flickable: settingsFlick } // same wheel speed as the library
+
             ColumnLayout {
                 id: column
 
@@ -268,8 +270,25 @@ Item {
                         }
                     }
 
+                    RowLayout {
+                        visible: Theme.backgroundImage !== ""
+                        spacing: 12
+
+                        Label { text: qsTr("Blur"); opacity: 0.8; Layout.preferredWidth: 140 }
+
+                        Slider {
+                            Layout.preferredWidth: 220
+                            from: 0
+                            to: 1
+                            value: Theme.backgroundBlur
+                            onMoved: Theme.backgroundBlur = Math.round(value * 100) / 100
+                        }
+
+                        Label { text: Math.round(Theme.backgroundBlur * 100) + "%"; opacity: 0.6 }
+                    }
+
                     Hint {
-                        text: qsTr("Shown blurred behind the panels. A copy is kept with your data, so the original can be moved or deleted.")
+                        text: qsTr("Shown behind the panels, blurred as much as the slider says. A copy is kept with your data, so the original can be moved or deleted.")
                     }
                 }
 
