@@ -15,6 +15,8 @@
 
 using namespace Qt::StringLiterals;
 
+constexpr int kMenuWidth = 240;
+
 TrayController::TrayController(SettingsController &settings, PlayerController &player, const QIcon &icon,
                                QObject *parent)
     : QObject(parent)
@@ -31,6 +33,7 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     auto *row = new QHBoxLayout(controls);
     row->setContentsMargins(8, 4, 8, 4);
     row->setSpacing(4);
+    row->addStretch(); // centered in the fixed-width menu
     const auto addButton = [&](auto onClick) {
         auto *button = new QToolButton(controls);
         button->setAutoRaise(true);
@@ -46,6 +49,7 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     m_next = addButton([this] { m_player.next(); });
     m_repeat = addButton([this] { m_player.setRepeat(PlayerController::Repeat((m_player.repeat() + 1) % 3)); });
     m_repeat->setCheckable(true);
+    row->addStretch();
     auto *controlsAction = new QWidgetAction(&m_menu);
     controlsAction->setDefaultWidget(controls);
     m_menu.addAction(controlsAction);
@@ -56,9 +60,8 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     connect(&m_player, &PlayerController::playingChanged, this, &TrayController::updateNowPlaying);
     connect(&m_settings, &SettingsController::translationApplied, this, &TrayController::updateNowPlaying);
     updateNowPlaying();
-    m_menu.addAction(tr("Show %1").arg(QGuiApplication::applicationDisplayName()), this, &TrayController::restoreWindow);
-    m_menu.addSeparator();
     m_menu.addAction(tr("Quit"), qApp, &QCoreApplication::quit);
+    m_menu.setFixedWidth(kMenuWidth);
     m_tray->setContextMenu(&m_menu);
 
     connect(m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -104,7 +107,9 @@ void TrayController::updateNowPlaying()
     const QString song = m_player.artist().isEmpty() ? m_player.title()
                                                      : tr("%1 – %2").arg(m_player.title(), m_player.artist());
     // "&" would turn the next letter into a keyboard shortcut in the menu.
-    m_nowPlaying->setText(QString(song).replace(u'&', u"&&"_s));
+    // Cut to the menu's fixed width rather than widening the menu.
+    const QString shown = m_menu.fontMetrics().elidedText(song, Qt::ElideRight, kMenuWidth - 48);
+    m_nowPlaying->setText(QString(shown).replace(u'&', u"&&"_s));
     m_nowPlaying->setEnabled(true);
     m_tray->setToolTip(QGuiApplication::applicationDisplayName() + u" — "_s + song);
 }

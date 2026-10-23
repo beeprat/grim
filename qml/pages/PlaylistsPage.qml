@@ -351,8 +351,21 @@ Item {
                                     Layout.fillWidth: true
                                     text: row.modelData.artist || qsTr("Unknown artist")
                                     elide: Text.ElideRight
-                                    opacity: 0.6
+                                    opacity: artistMouse.containsMouse ? 1 : 0.6
                                     font.pixelSize: 12
+                                    font.underline: artistMouse.containsMouse
+
+                                    // Opens the artist's albums in the library.
+                                    MouseArea {
+                                        id: artistMouse
+
+                                        width: Math.min(parent.contentWidth, parent.width)
+                                        height: parent.height
+                                        enabled: row.modelData.artist !== ""
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: ApplicationWindow.window.showArtist(row.modelData.artist)
+                                    }
                                 }
                             }
 
