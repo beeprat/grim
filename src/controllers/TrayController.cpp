@@ -104,7 +104,7 @@ void TrayController::updateNowPlaying()
     const QString song = m_player.artist().isEmpty() ? m_player.title()
                                                      : tr("%1 – %2").arg(m_player.title(), m_player.artist());
     // "&" would turn the next letter into a keyboard shortcut in the menu.
-    m_nowPlaying->setText((m_player.playing() ? u"▶  "_s : u"❚❚  "_s) + QString(song).replace(u'&', u"&&"_s));
+    m_nowPlaying->setText(QString(song).replace(u'&', u"&&"_s));
     m_nowPlaying->setEnabled(true);
     m_tray->setToolTip(QGuiApplication::applicationDisplayName() + u" — "_s + song);
 }
