@@ -19,7 +19,7 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 
 **playback:**
 - gapless playback, ili crossfade od 0.1 do 12 sekundi.
-- efekti: slowed (vinyl-stil), reverb i pitch shift. (±12 semitona, tempo je zadržan)
+- efekti: brzina (sporije ili brže, vinyl-stil, 50–150 %) i reverb.
 - pamti poslednju pesmu i dužinu prilikom izlaska iz playera.
 - media keys, system tray sa trenutnom pesmom, Windows 11 rounded window.
 
@@ -46,7 +46,7 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 **ostalo:**
 - accent boje, tri tamne pozadine, corner roundness i interfejs zum (ctrl + točkić)
 - podrška za prevod: fajl za prevod u podešavanjima. (trenutno samo Srpski i Engleski)
-- slowed, reverb i pitch slideri.
+- slideri za brzinu i reverb.
 - minimize na system tray
 - clear cache dugme
 
@@ -90,7 +90,6 @@ napravljeno uz:
 - [Qt 6](https://www.qt.io) (LGPL-3.0)
 - [miniaudio](https://miniaud.io) (public domain / MIT-0)
 - [TagLib](https://taglib.org) (LGPL-2.1 / MPL-1.1)
-- [SoundTouch](https://www.surina.net/soundtouch) (LGPL-2.1)
 - reverb od Jezar Freeverb (public domain)
 - ikonice od [Material Design Icons](https://fonts.google.com/icons) (Apache-2.0)
 

@@ -395,7 +395,7 @@ Item {
                     }
 
                     Hint {
-                        text: qsTr("Shows a button next to the volume that opens Slowed, Reverb and Pitch. Effects apply to everything that plays, and only while this is on.")
+                        text: qsTr("Shows a button next to the volume that opens Speed and Reverb. Effects apply to everything that plays, and only while this is on.")
                     }
                 }
 

@@ -39,35 +39,6 @@ FetchContent_MakeAvailable(miniaudio)
 add_library(miniaudio STATIC ${miniaudio_SOURCE_DIR}/miniaudio.c)
 target_include_directories(miniaudio SYSTEM PUBLIC ${miniaudio_SOURCE_DIR})
 
-# SoundTouch 2.3.3 (LGPL-2.1): pitch shifting without changing tempo. Like miniaudio, only the
-# library sources are compiled (no BPM detection, no command-line tool); float samples, SSE.
-FetchContent_Declare(soundtouch
-    URL https://www.surina.net/soundtouch/soundtouch-2.3.3.tar.gz
-    URL_HASH SHA256=43b23dfac2f64a3aff55d64be096ffc7b73842c3f5665caff44975633a975a99
-    SOURCE_SUBDIR do-not-add-subdirectory
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-)
-FetchContent_MakeAvailable(soundtouch)
-set(soundtouch_src ${soundtouch_SOURCE_DIR}/source/SoundTouch)
-add_library(soundtouch STATIC
-    ${soundtouch_src}/AAFilter.cpp
-    ${soundtouch_src}/FIFOSampleBuffer.cpp
-    ${soundtouch_src}/FIRFilter.cpp
-    ${soundtouch_src}/InterpolateCubic.cpp
-    ${soundtouch_src}/InterpolateLinear.cpp
-    ${soundtouch_src}/InterpolateShannon.cpp
-    ${soundtouch_src}/RateTransposer.cpp
-    ${soundtouch_src}/SoundTouch.cpp
-    ${soundtouch_src}/TDStretch.cpp
-    ${soundtouch_src}/cpu_detect_x86.cpp
-    ${soundtouch_src}/sse_optimized.cpp
-)
-target_include_directories(soundtouch SYSTEM PUBLIC ${soundtouch_SOURCE_DIR}/include)
-target_compile_definitions(soundtouch PUBLIC SOUNDTOUCH_FLOAT_SAMPLES PRIVATE SOUNDTOUCH_ALLOW_SSE)
-if(MSVC)
-    target_compile_options(soundtouch PRIVATE /W0) # third-party code
-endif()
-
 # TagLib: title/artist/album/duration. Static; the release tarball bundles utfcpp.
 # No zlib: only needed for rare compressed ID3v2 frames.
 set(BUILD_SHARED_LIBS OFF)
@@ -132,8 +103,6 @@ add_library(musicplayer_core STATIC
     src/audio/AacSource.h
     src/audio/Reverb.h
     src/audio/Reverb.cpp
-    src/audio/PitchShifter.h
-    src/audio/PitchShifter.cpp
 )
 target_include_directories(musicplayer_core PUBLIC src)
 # windows.h (pulled in by Media Foundation) otherwise defines min/max macros.
@@ -141,7 +110,7 @@ target_compile_definitions(musicplayer_core PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
 target_link_libraries(musicplayer_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
     PUBLIC miniaudio # AacSource.h exposes ma_data_source
-    PRIVATE tag soundtouch musicplayer_warnings)
+    PRIVATE tag musicplayer_warnings)
 # AAC/M4A decoding: Media Foundation on Windows, FFmpeg elsewhere (picked in AacSource.h).
 if(WIN32)
     target_sources(musicplayer_core PRIVATE src/audio/MfAudioSource.h src/audio/MfAudioSource.cpp)

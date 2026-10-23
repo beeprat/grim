@@ -255,20 +255,6 @@ void PlayerController::setReverb(double amount)
     emit effectsChanged();
 }
 
-double PlayerController::pitchSemitones() const
-{
-    return m_pitchSemitones;
-}
-
-void PlayerController::setPitchSemitones(double semitones)
-{
-    if (qFuzzyCompare(1 + semitones, 1 + m_pitchSemitones))
-        return;
-    m_pitchSemitones = semitones;
-    m_engine.setPitchSemitones(float(semitones));
-    emit effectsChanged();
-}
-
 bool PlayerController::lyricsShown() const
 {
     return m_lyricsShown;

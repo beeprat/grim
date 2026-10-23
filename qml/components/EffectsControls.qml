@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls.Material
 import MusicPlayer
 
-// Slowed, reverb and pitch: a switch, an amount slider and the value for each. Off keeps the
+// Speed and reverb: a switch, an amount slider and the value for each. Off keeps the
 // amount for next time. Used on the Settings page and in the now-playing effects popup.
 ColumnLayout {
     id: controls
@@ -54,15 +54,15 @@ ColumnLayout {
     }
 
     EffectRow {
-        label: qsTr("Slowed")
-        checked: Effects.slowed
-        from: 0.7
-        to: 0.95
+        label: qsTr("Speed")
+        checked: Effects.speed
+        from: 0.5
+        to: 1.5
         stepSize: 0.01
-        value: Effects.slowedSpeed
+        value: Effects.speedAmount
         valueText: Math.round(value * 100) + " %"
-        onToggled: (on) => Effects.slowed = on
-        onMoved: (v) => Effects.slowedSpeed = Math.round(v * 100) / 100
+        onToggled: (on) => Effects.speed = on
+        onMoved: (v) => Effects.speedAmount = Math.round(v * 100) / 100
     }
 
     EffectRow {
@@ -75,17 +75,5 @@ ColumnLayout {
         valueText: Math.round(value * 100) + " %"
         onToggled: (on) => Effects.reverb = on
         onMoved: (v) => Effects.reverbAmount = Math.round(v * 20) / 20
-    }
-
-    EffectRow {
-        label: qsTr("Pitch")
-        checked: Effects.pitch
-        from: -12
-        to: 12
-        stepSize: 0.5
-        value: Effects.pitchSemitones
-        valueText: (value > 0 ? "+" : "") + value.toFixed(1)
-        onToggled: (on) => Effects.pitch = on
-        onMoved: (v) => Effects.pitchSemitones = Math.round(v * 2) / 2
     }
 }

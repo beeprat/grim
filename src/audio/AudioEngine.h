@@ -55,10 +55,9 @@ public:
     void setTrackGain(float gain);
 
     // Effects, applied to everything that plays. Speed resamples (1 = normal, 0.8 = slower and
-    // lower, like a slowed-down record); reverb 0..1; pitch in semitones with tempo unchanged.
+    // lower, like a slowed-down record); reverb 0..1.
     void setSpeed(float speed);
     void setReverb(float amount);
-    void setPitchSemitones(float semitones);
 
 private:
     struct Impl;

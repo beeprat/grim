@@ -110,10 +110,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   dialog in `Main.qml`, ±20 dB, `core/ReplayGain::fromDb`), 1 without one. ReplayGain tags are not applied (removed
   on request); the dialog only shows the tag as a hint. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
 - Effects: only in the popup by the volume, and applied only while Settings → Effects → "Show effects button" is
-  on (`Effects.showInNowPlaying`). Slowed = `ma_sound_set_pitch`; Reverb (Freeverb) and Pitch (SoundTouch 2.3.3, LGPL) in one custom
-  `EffectsNode`. Gapless timing and Discord timestamps divide by the speed.
-  shortcut: SoundTouch allocates in putSamples on the mixing thread while its buffers grow; move it to a worker with a
-  ring buffer if that ever glitches.
+  on (`Effects.showInNowPlaying`). Speed (0.5–1.5, pitch follows) = `ma_sound_set_pitch`; Reverb (Freeverb) in a custom
+  `EffectsNode`. Gapless timing and Discord timestamps divide by the speed. Speed is stored under the old
+  `effects/slowed`, `effects/slowedSpeed` keys. Pitch shift (SoundTouch) was removed on request.
 - `PlayerController` polls every 200 ms (15 ms while an A-B loop is set); `positionChanged` fires once per second.
 - Crossfade: only automatic track changes (not manual next/prev, repeat one, or tracks shorter than two fades).
 - Gapless (crossfade off): 5 s before the end, `queueNext` schedules the next track with

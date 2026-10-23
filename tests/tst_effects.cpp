@@ -1,4 +1,3 @@
-#include "audio/PitchShifter.h"
 #include "audio/Reverb.h"
 
 #include <QTest>
@@ -18,23 +17,6 @@ std::vector<float> sine(double frequency, std::size_t frames)
     for (std::size_t i = 0; i < frames; ++i)
         samples[2 * i] = samples[2 * i + 1] = float(0.5 * std::sin(2 * std::numbers::pi * frequency * i / kRate));
     return samples;
-}
-
-// Frequency of the left channel from its rising zero crossings.
-double frequencyOf(const std::vector<float> &samples, std::size_t fromFrame)
-{
-    int crossings = 0;
-    std::size_t first = 0;
-    std::size_t last = 0;
-    for (std::size_t i = fromFrame + 1; i < samples.size() / 2; ++i) {
-        if (samples[2 * (i - 1)] < 0 && samples[2 * i] >= 0) {
-            if (crossings == 0)
-                first = i;
-            last = i;
-            ++crossings;
-        }
-    }
-    return crossings > 1 ? (crossings - 1) * double(kRate) / double(last - first) : 0;
 }
 
 } // namespace
@@ -73,34 +55,6 @@ private slots:
         }
         QVERIFY(tail > 0.01);
         QVERIFY(samples[2 * 5000] != samples[2 * 5000 + 1]); // left and right differ: stereo width
-    }
-
-    void pitchShiftKeepsTempoAndMovesTheKey_data()
-    {
-        QTest::addColumn<float>("semitones");
-        QTest::addColumn<double>("expected");
-        QTest::newRow("octave up") << 12.0f << 880.0;
-        QTest::newRow("fifth down") << -7.0f << 440.0 * std::pow(2.0, -7.0 / 12);
-    }
-
-    void pitchShiftKeepsTempoAndMovesTheKey()
-    {
-        QFETCH(float, semitones);
-        QFETCH(double, expected);
-
-        PitchShifter shifter;
-        shifter.prepare(kRate, 2);
-        shifter.setSemitones(semitones);
-
-        // Two seconds in blocks, like the mixer: every block gives as many frames as it takes.
-        constexpr std::size_t kBlock = 480;
-        const std::vector<float> input = sine(440, kRate * 2);
-        std::vector<float> output(input.size());
-        for (std::size_t frame = 0; frame + kBlock <= kRate * 2; frame += kBlock)
-            shifter.process(input.data() + 2 * frame, output.data() + 2 * frame, kBlock);
-
-        // Skip the start (SoundTouch's latency outputs silence first).
-        QVERIFY(qAbs(frequencyOf(output, kRate / 2) - expected) < expected * 0.02);
     }
 };
 

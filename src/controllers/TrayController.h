@@ -5,7 +5,6 @@
 #include <QPointer>
 
 class PlayerController;
-class QAction;
 class QSystemTrayIcon;
 class QToolButton;
 class QWindow;
@@ -32,7 +31,7 @@ private:
 
     SettingsController &m_settings;
     PlayerController &m_player;
-    QAction *m_nowPlaying;
+    QToolButton *m_nowPlaying;
     QToolButton *m_shuffle;
     QToolButton *m_previous;
     QToolButton *m_playPause;

@@ -25,8 +25,17 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     , m_tray(new QSystemTrayIcon(icon, this))
 {
     m_tray->setToolTip(QGuiApplication::applicationDisplayName());
-    // What is playing, as a heading; clicking it opens the window.
-    m_nowPlaying = m_menu.addAction(QString(), this, &TrayController::restoreWindow);
+    // The title of what is playing, centered, as a heading; clicking it opens the window.
+    m_nowPlaying = new QToolButton;
+    m_nowPlaying->setAutoRaise(true);
+    m_nowPlaying->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    connect(m_nowPlaying, &QToolButton::clicked, this, [this] {
+        m_menu.close();
+        restoreWindow();
+    });
+    auto *titleAction = new QWidgetAction(&m_menu);
+    titleAction->setDefaultWidget(m_nowPlaying);
+    m_menu.addAction(titleAction);
     m_menu.addSeparator();
     // Playback controls as one row of icon buttons; clicking them keeps the menu open.
     auto *controls = new QWidget;
@@ -106,9 +115,9 @@ void TrayController::updateNowPlaying()
     }
     const QString song = m_player.artist().isEmpty() ? m_player.title()
                                                      : tr("%1 – %2").arg(m_player.title(), m_player.artist());
-    // "&" would turn the next letter into a keyboard shortcut in the menu.
     // Cut to the menu's fixed width rather than widening the menu.
-    const QString shown = m_menu.fontMetrics().elidedText(song, Qt::ElideRight, kMenuWidth - 48);
+    const QString shown = m_nowPlaying->fontMetrics().elidedText(m_player.title(), Qt::ElideRight, kMenuWidth - 32);
+    // "&" would turn the next letter into a keyboard shortcut.
     m_nowPlaying->setText(QString(shown).replace(u'&', u"&&"_s));
     m_nowPlaying->setEnabled(true);
     m_tray->setToolTip(QGuiApplication::applicationDisplayName() + u" — "_s + song);

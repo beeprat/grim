@@ -47,11 +47,10 @@ class PlayerController : public QObject
     // False while the lyrics card is hidden: lyricIndex then stops following playback
     // (and catches up when shown again).
     Q_PROPERTY(bool lyricsShown READ lyricsShown WRITE setLyricsShown NOTIFY lyricsShownChanged FINAL)
-    // Effects (Settings → Effects), as heard: speed 1 = normal (0.8 = slowed: slower and lower),
-    // reverb 0 = none .. 1, pitch in semitones with the tempo kept.
+    // Effects (Settings → Effects), as heard: speed 1 = normal (0.8 = slowed: slower and lower,
+    // 1.2 = faster and higher), reverb 0 = none .. 1.
     Q_PROPERTY(double speed READ speed WRITE setSpeed NOTIFY effectsChanged FINAL)
     Q_PROPERTY(double reverb READ reverb WRITE setReverb NOTIFY effectsChanged FINAL)
-    Q_PROPERTY(double pitchSemitones READ pitchSemitones WRITE setPitchSemitones NOTIFY effectsChanged FINAL)
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY shuffleChanged FINAL)
     Q_PROPERTY(Repeat repeat READ repeat WRITE setRepeat NOTIFY repeatChanged FINAL)
     // A-B loop inside the current track (-1 = not set); playback jumps back to the start at the end.
@@ -104,8 +103,6 @@ public:
     void setSpeed(double speed);
     double reverb() const;
     void setReverb(double amount);
-    double pitchSemitones() const;
-    void setPitchSemitones(double semitones);
     bool shuffle() const;
     void setShuffle(bool shuffle);
     Repeat repeat() const;
@@ -204,7 +201,6 @@ private:
     bool m_lyricsShown = true;
     double m_speed = 1;
     double m_reverb = 0;
-    double m_pitchSemitones = 0;
     LyricsFetcher *m_lyricsFetcher;
     bool m_onlineLyrics = true;
     bool m_listenReported = false; // listenedLongEnough sent for this session

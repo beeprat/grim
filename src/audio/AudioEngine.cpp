@@ -1,6 +1,5 @@
 #include "audio/AudioEngine.h"
 #include "audio/AacSource.h"
-#include "audio/PitchShifter.h"
 #include "audio/Reverb.h"
 
 #include <miniaudio.h>
@@ -30,18 +29,15 @@ struct Slot
     }
 };
 
-// Pitch shift, then reverb, between the tracks and the output. Settings arrive as atomics from
+// Reverb between the tracks and the output. Settings arrive as atomics from
 // the GUI thread; the mixing thread applies them. Off effects are skipped entirely.
 struct EffectsNode
 {
     ma_node_base base{}; // first member: miniaudio treats a pointer to this struct as the node
     ma_uint32 channels = 2;
-    PitchShifter pitch;
     Reverb reverb;
-    std::atomic<float> semitones{0};
     std::atomic<float> reverbAmount{0};
     // Mixing-thread state.
-    float appliedSemitones = 0;
     float appliedReverb = 0;
 
     static void process(ma_node *node, const float **framesIn, ma_uint32 *frameCountIn, float **framesOut,
@@ -52,17 +48,7 @@ struct EffectsNode
         const std::size_t samples = std::size_t(frames) * self->channels;
         float *out = framesOut[0];
 
-        const float semis = self->semitones.load(std::memory_order_relaxed);
-        if (semis != self->appliedSemitones) {
-            if (self->appliedSemitones == 0)
-                self->pitch.clear(); // nothing stale from the last time it was on
-            self->pitch.setSemitones(semis);
-            self->appliedSemitones = semis;
-        }
-        if (semis != 0)
-            self->pitch.process(framesIn[0], out, frames);
-        else
-            std::copy(framesIn[0], framesIn[0] + samples, out);
+        std::copy(framesIn[0], framesIn[0] + samples, out);
 
         const float amount = self->reverbAmount.load(std::memory_order_relaxed);
         if (amount != self->appliedReverb) {
@@ -165,7 +151,6 @@ AudioEngine::AudioEngine()
     EffectsNode &effects = m_impl->effects;
     effects.channels = ma_engine_get_channels(&m_impl->engine);
     const ma_uint32 rate = ma_engine_get_sample_rate(&m_impl->engine);
-    effects.pitch.prepare(rate, effects.channels);
     effects.reverb.prepare(rate);
     ma_node_config config = ma_node_config_init();
     config.vtable = &kEffectsVtable;
@@ -381,9 +366,4 @@ void AudioEngine::setSpeed(float speed)
 void AudioEngine::setReverb(float amount)
 {
     m_impl->effects.reverbAmount.store(std::clamp(amount, 0.0f, 1.0f), std::memory_order_relaxed);
-}
-
-void AudioEngine::setPitchSemitones(float semitones)
-{
-    m_impl->effects.semitones.store(std::clamp(semitones, -12.0f, 12.0f), std::memory_order_relaxed);
 }
