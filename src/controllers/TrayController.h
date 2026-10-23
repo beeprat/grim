@@ -12,7 +12,7 @@ class SettingsController;
 
 // System tray icon. With "minimize to tray" on, minimizing hides the window
 // to the tray; clicking the icon brings it back. Its right-click menu starts with the
-// song that is playing. Not exposed to QML.
+// song that is playing, then playback controls. Not exposed to QML.
 class TrayController : public QObject
 {
     Q_OBJECT
@@ -31,6 +31,9 @@ private:
     SettingsController &m_settings;
     PlayerController &m_player;
     QAction *m_nowPlaying;
+    QAction *m_playPause;
+    QAction *m_shuffle;
+    QAction *m_repeat;
     QSystemTrayIcon *m_tray;
     QMenu m_menu; // QMenu is a widget; it cannot have a QObject parent
     QPointer<QWindow> m_window;

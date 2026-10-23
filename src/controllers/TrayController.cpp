@@ -20,6 +20,17 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     // What is playing, as a heading; clicking it opens the window.
     m_nowPlaying = m_menu.addAction(QString(), this, &TrayController::restoreWindow);
     m_menu.addSeparator();
+    m_playPause = m_menu.addAction(QString(), &m_player, &PlayerController::togglePlay);
+    m_menu.addAction(tr("Next"), &m_player, &PlayerController::next);
+    m_menu.addAction(tr("Previous"), &m_player, &PlayerController::previous);
+    m_shuffle = m_menu.addAction(tr("Shuffle"), this, [this](bool on) { m_player.setShuffle(on); });
+    m_shuffle->setCheckable(true);
+    m_repeat = m_menu.addAction(QString(), this, [this] {
+        m_player.setRepeat(PlayerController::Repeat((m_player.repeat() + 1) % 3));
+    });
+    m_menu.addSeparator();
+    connect(&m_player, &PlayerController::shuffleChanged, this, &TrayController::updateNowPlaying);
+    connect(&m_player, &PlayerController::repeatChanged, this, &TrayController::updateNowPlaying);
     connect(&m_player, &PlayerController::trackChanged, this, &TrayController::updateNowPlaying);
     connect(&m_player, &PlayerController::playingChanged, this, &TrayController::updateNowPlaying);
     connect(&m_settings, &SettingsController::translationApplied, this, &TrayController::updateNowPlaying);
@@ -55,6 +66,12 @@ void TrayController::setWindow(QWindow *window)
 
 void TrayController::updateNowPlaying()
 {
+    m_playPause->setText(m_player.playing() ? tr("Pause") : tr("Play"));
+    m_playPause->setEnabled(m_player.hasTrack());
+    m_shuffle->setChecked(m_player.shuffle());
+    m_repeat->setText(m_player.repeat() == PlayerController::RepeatOff ? tr("Repeat: off")
+                      : m_player.repeat() == PlayerController::RepeatAll ? tr("Repeat: all")
+                                                                          : tr("Repeat: one"));
     if (!m_player.hasTrack()) {
         m_nowPlaying->setText(tr("Nothing playing"));
         m_nowPlaying->setEnabled(false);

@@ -530,13 +530,32 @@ Item {
 
                         Layout.fillWidth: true // shrinks first when the window is narrow
                         Layout.minimumWidth: 60
-                        Layout.maximumWidth: 240
+                        Layout.maximumWidth: 300
+                        Layout.preferredWidth: 300 // the whole placeholder fits
                         Layout.preferredHeight: 40
+                        rightPadding: clearSearch.visible ? clearSearch.width + 4 : 12
                         placeholderText: qsTr("Search title, artist, album")
                         text: LibraryController.filter
                         onTextEdited: LibraryController.filter = text
                         Keys.onEscapePressed: LibraryController.filter = ""
                         selectByMouse: true
+
+                        IconButton {
+                            id: clearSearch
+
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 32
+                            height: 32
+                            padding: 0
+                            topInset: 0
+                            bottomInset: 0
+                            iconName: "close"
+                            iconSize: 16
+                            tip: qsTr("Clear search")
+                            visible: searchField.text !== ""
+                            onClicked: LibraryController.filter = ""
+                        }
                     }
 
                     IconButton {
@@ -789,10 +808,31 @@ Item {
                             opacity: 0.5
                         }
 
-                        AccentButton {
+                        RowLayout {
                             Layout.topMargin: 8
-                            text: "▶  " + qsTr("Play")
-                            onClicked: page.playAlbum(0)
+                            spacing: 8
+
+                            AccentButton {
+                                implicitWidth: 56
+                                text: "▶"
+                                ToolTip.text: qsTr("Play")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 600
+                                onClicked: {
+                                    PlayerController.shuffle = false
+                                    page.playAlbum(0)
+                                }
+                            }
+
+                            IconButton {
+                                iconName: "shuffle"
+                                tip: qsTr("Shuffle album")
+                                onClicked: {
+                                    const urls = LibraryController.albums.urlsOf(page.openAlbum)
+                                    PlayerController.shuffle = true
+                                    PlayerController.playQueue(urls, Math.floor(Math.random() * urls.length))
+                                }
+                            }
                         }
                     }
                 }

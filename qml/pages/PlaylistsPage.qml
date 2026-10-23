@@ -186,6 +186,9 @@ Item {
 
                         background: Rectangle {
                             radius: Math.min(Theme.radius, 10)
+                            // The open row runs on into `tabBridge`: no rounding on that side.
+                            topRightRadius: entry.current ? 0 : radius
+                            bottomRightRadius: entry.current ? 0 : radius
                             color: entry.current ? Theme.panel : entry.hovered ? Theme.hover : "transparent"
                         }
 
@@ -424,12 +427,13 @@ Item {
         readonly property real rowY: row && playlistList.contentY >= -1e9 && playlistsCard.width >= 0
                                      ? row.mapToItem(page, 0, 0).y : 0
         readonly property real listTop: playlistsCard.height >= 0 ? playlistList.mapToItem(page, 0, 0).y : 0
-        // Starts under the row's rounded right corners, so the row and bridge read as one shape.
+        // Starts where the row ends and stops at the tracks card, overlapping neither: the panel color
+        // is see-through over a background image, and an overlap would show as a darker strip.
         readonly property real listRight: playlistsCard.width >= 0 && playlistsCard.x >= -1e9
                                           ? playlistList.mapToItem(page, playlistList.width, 0).x : 0
 
-        x: listRight - Math.min(Theme.radius, 10)
-        width: tracksCard.x - x + 1
+        x: Math.round(listRight)
+        width: Math.round(tracksCard.x) - x
         y: rowY
         height: row ? row.height : 0
         color: Theme.panel

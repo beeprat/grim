@@ -58,6 +58,7 @@ QtObject {
     // SettingsController.importBackground); empty = plain background color.
     property string backgroundImage: ""
     property real backgroundBlur: 1 // 0 = sharp .. 1 = fully blurred
+    property int backgroundFill: Image.PreserveAspectCrop // or PreserveAspectFit, Stretch
 
     // Derived colors used by every page.
     readonly property color accent: accents[Math.min(accentIndex, accents.length - 1)].color
@@ -78,5 +79,6 @@ QtObject {
         property alias arrangePanels: theme.arrangePanels
         property alias backgroundImage: theme.backgroundImage
         property alias backgroundBlur: theme.backgroundBlur
+        property alias backgroundFill: theme.backgroundFill
     }
 }

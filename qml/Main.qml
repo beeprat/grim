@@ -658,7 +658,7 @@ ApplicationWindow {
             anchors.fill: parent
             source: Theme.backgroundImage
             visible: false // drawn by the blur below
-            fillMode: Image.PreserveAspectCrop
+            fillMode: Theme.backgroundFill
             asynchronous: true
             // Blurred anyway: a small decode keeps memory and the blur cheap.
             sourceSize: Qt.size(960, 960)
@@ -880,7 +880,15 @@ ApplicationWindow {
                             anchors.margins: 8
                             spacing: 4
 
-                            NavButton { page: 0; text: qsTr("Library"); icon.source: "icons/library.svg" }
+                            // While an album is open it is the way back to the grid (same as Escape).
+                            NavButton {
+                                readonly property bool back: root.page === 0 && libraryPage.openAlbum >= 0
+
+                                page: 0
+                                text: back ? qsTr("Back") : qsTr("Library")
+                                icon.source: back ? "icons/back.svg" : "icons/library.svg"
+                                onClicked: if (back) libraryPage.openAlbum = -1
+                            }
                             NavButton { page: 1; text: qsTr("Playlists"); icon.source: "icons/playlist.svg" }
                             NavButton { page: 2; text: qsTr("Statistics"); icon.source: "icons/statistics.svg" }
                             // Greyed out until slskd answers (it may still be starting, or not installed).

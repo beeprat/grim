@@ -95,108 +95,53 @@ Item {
                 SettingsPanel {
                     SectionTitle { text: qsTr("Appearance") }
 
-                    Label { text: qsTr("Theme"); opacity: 0.8 }
+                    // Theme, accent and background as drop-downs, to keep the section short.
+                    GridLayout {
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 8
 
-                    // Sets the background and accent below together.
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 8
+                        Label { text: qsTr("Theme"); opacity: 0.8; Layout.preferredWidth: 140 }
 
-                        Repeater {
+                        // Sets the background and accent below together; "Custom" once they no longer match one.
+                        CompactComboBox {
+                            Layout.preferredWidth: 220
+                            textRole: "name"
                             model: Theme.themes
-
-                            delegate: Button {
-                                id: themeButton
-
-                                required property int index
-                                required property var modelData
-                                readonly property bool current: Theme.backgroundIndex === modelData.background
-                                                                && Theme.accentIndex === modelData.accent
-
-                                text: modelData.name
-                                onClicked: Theme.applyTheme(index)
-                                Material.background: Theme.backgrounds[modelData.background].card
-                                Material.foreground: Theme.accents[modelData.accent].color
-                                font.weight: current ? Font.DemiBold : Font.Normal
-
-                                // The accent as a dot in front of the name.
-                                leftPadding: 30
-                                Rectangle {
-                                    x: 14
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 10
-                                    height: 10
-                                    radius: 5
-                                    color: Theme.accents[themeButton.modelData.accent].color
-                                    border.width: themeButton.current ? 2 : 0
-                                    border.color: Qt.rgba(1, 1, 1, 0.8)
-                                }
-                            }
+                            currentIndex: Theme.themes.findIndex(t => t.background === Theme.backgroundIndex
+                                                                     && t.accent === Theme.accentIndex)
+                            displayText: currentIndex >= 0 ? currentText : qsTr("Custom")
+                            onActivated: (index) => Theme.applyTheme(index)
                         }
-                    }
 
-                    Label { Layout.topMargin: 4; text: qsTr("Accent"); opacity: 0.8 }
+                        Label { text: qsTr("Accent"); opacity: 0.8 }
 
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        Repeater {
+                        CompactComboBox {
+                            Layout.preferredWidth: 220
+                            textRole: "name"
                             model: Theme.accents
-
-                            delegate: AbstractButton {
-                                id: swatch
-
-                                required property int index
-                                required property var modelData
-
-                                implicitWidth: 30
-                                implicitHeight: 30
-                                hoverEnabled: true
-                                onClicked: Theme.accentIndex = index
-                                ToolTip.text: modelData.name
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 300
-
-                                background: Rectangle {
-                                    radius: width / 2
-                                    color: swatch.modelData.color
-                                    border.width: Theme.accentIndex === swatch.index ? 3 : 0
-                                    border.color: Theme.window
-                                    // Ring around the chosen one.
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        anchors.margins: -3
-                                        radius: width / 2
-                                        color: "transparent"
-                                        border.width: Theme.accentIndex === swatch.index ? 2 : 0
-                                        border.color: swatch.modelData.color
-                                    }
-                                }
+                            currentIndex: Theme.accentIndex
+                            onActivated: (index) => Theme.accentIndex = index
+                            // The accent as a dot in front of the name.
+                            leftPadding: 34
+                            Rectangle {
+                                x: 14
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 12
+                                height: 12
+                                radius: 6
+                                color: Theme.accent
                             }
                         }
-                    }
 
-                    Label { Layout.topMargin: 4; text: qsTr("Background"); opacity: 0.8 }
+                        Label { text: qsTr("Background"); opacity: 0.8 }
 
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Repeater {
+                        CompactComboBox {
+                            Layout.preferredWidth: 220
+                            textRole: "name"
                             model: Theme.backgrounds
-
-                            delegate: Button {
-                                required property int index
-                                required property var modelData
-
-                                text: (checked ? "✓  " : "") + modelData.name
-                                checkable: true
-                                checked: Theme.backgroundIndex === index
-                                onClicked: Theme.backgroundIndex = index
-                                Material.background: modelData.card
-                                Material.foreground: checked ? Theme.accent : Material.foreground
-                            }
+                            currentIndex: Theme.backgroundIndex
+                            onActivated: (index) => Theme.backgroundIndex = index
                         }
                     }
 
@@ -225,16 +170,22 @@ Item {
                         Label { text: qsTr("Interface size"); opacity: 0.8; Layout.preferredWidth: 140 }
 
                         Slider {
+                            id: uiScaleSlider
+
                             Layout.preferredWidth: 220
                             from: 0.6
                             to: 2.0
                             stepSize: 0.1
                             snapMode: Slider.SnapAlways
                             value: Theme.uiScale
-                            onMoved: Theme.uiScale = Math.round(value * 100) / 100
+                            // Resizing everything while dragging is slow and moves the slider under the
+                            // mouse: apply on release (keys apply at once).
+                            function apply() { Theme.uiScale = Math.round(value * 100) / 100 }
+                            onMoved: if (!pressed) apply()
+                            onPressedChanged: if (!pressed) apply()
                         }
 
-                        Label { text: Math.round(Theme.uiScale * 100) + "%"; opacity: 0.6 }
+                        Label { text: Math.round(uiScaleSlider.value * 100) + "%"; opacity: 0.6 }
                     }
 
                     Hint {
@@ -285,6 +236,26 @@ Item {
                         }
 
                         Label { text: Math.round(Theme.backgroundBlur * 100) + "%"; opacity: 0.6 }
+                    }
+
+                    RowLayout {
+                        visible: Theme.backgroundImage !== ""
+                        spacing: 12
+
+                        Label { text: qsTr("Size"); opacity: 0.8; Layout.preferredWidth: 140 }
+
+                        CompactComboBox {
+                            Layout.preferredWidth: 220
+                            textRole: "label"
+                            valueRole: "value"
+                            model: [
+                                { label: qsTr("Fill (crop the edges)"), value: Image.PreserveAspectCrop },
+                                { label: qsTr("Fit (whole image)"), value: Image.PreserveAspectFit },
+                                { label: qsTr("Stretch"), value: Image.Stretch }
+                            ]
+                            currentIndex: Math.max(0, indexOfValue(Theme.backgroundFill))
+                            onActivated: Theme.backgroundFill = currentValue
+                        }
                     }
 
                     Hint {
