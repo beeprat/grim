@@ -45,10 +45,26 @@ QHash<int, QByteArray> StatsListModel::roleNames() const
 
 void StatsListModel::setEntries(QList<Entry> entries)
 {
+    const auto byListened = [](const Entry &a, const Entry &b) { return a.listenedMs < b.listenedMs; };
+    const auto maxIt = std::max_element(entries.cbegin(), entries.cend(), byListened);
+    const qint64 maxListenedMs = maxIt != entries.cend() ? maxIt->listenedMs : 0;
+
+    // Refreshed on every visit and every few seconds: when the same rows come back in the same order
+    // (only the numbers moved), update them in place. A reset rebuilds every row and reloads its cover,
+    // which made opening the page lag.
+    const auto sameRow = [](const Entry &a, const Entry &b) {
+        return a.title == b.title && a.subtitle == b.subtitle && a.url == b.url;
+    };
+    if (!m_entries.isEmpty()
+        && std::equal(entries.cbegin(), entries.cend(), m_entries.cbegin(), m_entries.cend(), sameRow)) {
+        m_entries = std::move(entries);
+        m_maxListenedMs = maxListenedMs;
+        emit dataChanged(index(0), index(int(m_entries.size()) - 1), {PlayCountRole, ListenedMsRole, ShareRole});
+        return;
+    }
+
     beginResetModel();
     m_entries = std::move(entries);
-    const auto byListened = [](const Entry &a, const Entry &b) { return a.listenedMs < b.listenedMs; };
-    const auto maxIt = std::max_element(m_entries.cbegin(), m_entries.cend(), byListened);
-    m_maxListenedMs = maxIt != m_entries.cend() ? maxIt->listenedMs : 0;
+    m_maxListenedMs = maxListenedMs;
     endResetModel();
 }
