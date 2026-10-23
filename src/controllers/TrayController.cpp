@@ -3,7 +3,13 @@
 #include "controllers/PlayerController.h"
 #include "controllers/SettingsController.h"
 
+#include <QBuffer>
+#include <QFile>
+#include <QImageReader>
 #include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QToolButton>
+#include <QWidgetAction>
 #include <QSystemTrayIcon>
 #include <QWindow>
 
@@ -20,14 +26,29 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     // What is playing, as a heading; clicking it opens the window.
     m_nowPlaying = m_menu.addAction(QString(), this, &TrayController::restoreWindow);
     m_menu.addSeparator();
-    m_playPause = m_menu.addAction(QString(), &m_player, &PlayerController::togglePlay);
-    m_menu.addAction(tr("Next"), &m_player, &PlayerController::next);
-    m_menu.addAction(tr("Previous"), &m_player, &PlayerController::previous);
-    m_shuffle = m_menu.addAction(tr("Shuffle"), this, [this](bool on) { m_player.setShuffle(on); });
+    // Playback controls as one row of icon buttons; clicking them keeps the menu open.
+    auto *controls = new QWidget;
+    auto *row = new QHBoxLayout(controls);
+    row->setContentsMargins(8, 4, 8, 4);
+    row->setSpacing(4);
+    const auto addButton = [&](auto onClick) {
+        auto *button = new QToolButton(controls);
+        button->setAutoRaise(true);
+        button->setIconSize(QSize(20, 20));
+        connect(button, &QToolButton::clicked, this, onClick);
+        row->addWidget(button);
+        return button;
+    };
+    m_shuffle = addButton([this] { m_player.setShuffle(!m_player.shuffle()); });
     m_shuffle->setCheckable(true);
-    m_repeat = m_menu.addAction(QString(), this, [this] {
-        m_player.setRepeat(PlayerController::Repeat((m_player.repeat() + 1) % 3));
-    });
+    m_previous = addButton([this] { m_player.previous(); });
+    m_playPause = addButton([this] { m_player.togglePlay(); });
+    m_next = addButton([this] { m_player.next(); });
+    m_repeat = addButton([this] { m_player.setRepeat(PlayerController::Repeat((m_player.repeat() + 1) % 3)); });
+    m_repeat->setCheckable(true);
+    auto *controlsAction = new QWidgetAction(&m_menu);
+    controlsAction->setDefaultWidget(controls);
+    m_menu.addAction(controlsAction);
     m_menu.addSeparator();
     connect(&m_player, &PlayerController::shuffleChanged, this, &TrayController::updateNowPlaying);
     connect(&m_player, &PlayerController::repeatChanged, this, &TrayController::updateNowPlaying);
@@ -66,12 +87,14 @@ void TrayController::setWindow(QWindow *window)
 
 void TrayController::updateNowPlaying()
 {
-    m_playPause->setText(m_player.playing() ? tr("Pause") : tr("Play"));
-    m_playPause->setEnabled(m_player.hasTrack());
+    m_shuffle->setIcon(menuIcon(u"shuffle"_s));
     m_shuffle->setChecked(m_player.shuffle());
-    m_repeat->setText(m_player.repeat() == PlayerController::RepeatOff ? tr("Repeat: off")
-                      : m_player.repeat() == PlayerController::RepeatAll ? tr("Repeat: all")
-                                                                          : tr("Repeat: one"));
+    m_previous->setIcon(menuIcon(u"previous"_s));
+    m_playPause->setIcon(menuIcon(m_player.playing() ? u"pause"_s : u"play"_s));
+    m_playPause->setEnabled(m_player.hasTrack());
+    m_next->setIcon(menuIcon(u"next"_s));
+    m_repeat->setIcon(menuIcon(m_player.repeat() == PlayerController::RepeatOne ? u"repeat_one"_s : u"repeat"_s));
+    m_repeat->setChecked(m_player.repeat() != PlayerController::RepeatOff);
     if (!m_player.hasTrack()) {
         m_nowPlaying->setText(tr("Nothing playing"));
         m_nowPlaying->setEnabled(false);
@@ -84,6 +107,22 @@ void TrayController::updateNowPlaying()
     m_nowPlaying->setText((m_player.playing() ? u"▶  "_s : u"❚❚  "_s) + QString(song).replace(u'&', u"&&"_s));
     m_nowPlaying->setEnabled(true);
     m_tray->setToolTip(QGuiApplication::applicationDisplayName() + u" — "_s + song);
+}
+
+// The app's white icons, recolored to the menu's text color (the menu may be light).
+QIcon TrayController::menuIcon(const QString &name) const
+{
+    QFile file(u":/qt/qml/MusicPlayer/qml/icons/"_s + name + u".svg"_s);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QByteArray color = m_menu.palette().color(QPalette::Text).name().toLatin1();
+    QByteArray svg = file.readAll().replace("#ffffff", color);
+    QBuffer buffer(&svg);
+    QImageReader reader(&buffer, "svg");
+    reader.setScaledSize(QSize(48, 48)); // sharp up to 240 % display scaling at 20 px
+    QPixmap pixmap = QPixmap::fromImage(reader.read());
+    pixmap.setDevicePixelRatio(48.0 / 20);
+    return QIcon(pixmap);
 }
 
 void TrayController::restoreWindow()

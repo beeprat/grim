@@ -7,6 +7,7 @@
 class PlayerController;
 class QAction;
 class QSystemTrayIcon;
+class QToolButton;
 class QWindow;
 class SettingsController;
 
@@ -27,13 +28,16 @@ public:
 
 private:
     void updateNowPlaying();
+    QIcon menuIcon(const QString &name) const;
 
     SettingsController &m_settings;
     PlayerController &m_player;
     QAction *m_nowPlaying;
-    QAction *m_playPause;
-    QAction *m_shuffle;
-    QAction *m_repeat;
+    QToolButton *m_shuffle;
+    QToolButton *m_previous;
+    QToolButton *m_playPause;
+    QToolButton *m_next;
+    QToolButton *m_repeat;
     QSystemTrayIcon *m_tray;
     QMenu m_menu; // QMenu is a widget; it cannot have a QObject parent
     QPointer<QWindow> m_window;
