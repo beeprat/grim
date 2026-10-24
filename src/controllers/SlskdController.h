@@ -2,6 +2,7 @@
 
 #include "core/AudioConverter.h"
 #include "core/SlskdClient.h"
+#include "core/SlskdRunner.h"
 #include "providers/DownloadsModel.h"
 #include "providers/SearchGroupsModel.h"
 #include "providers/SearchResultsModel.h"
@@ -25,6 +26,13 @@ class SlskdController : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
+    // "Run slskd for me": grim. downloads and runs its own slskd (SlskdRunner) and logs it in as `username`.
+    // Off: the user's own slskd at serverUrl/apiKey.
+    Q_PROPERTY(bool managed READ managed NOTIFY settingsChanged FINAL)
+    Q_PROPERTY(QString username READ username NOTIFY settingsChanged FINAL)
+    Q_PROPERTY(QString managedStatus READ managedStatus NOTIFY managedStatusChanged FINAL)
+    Q_PROPERTY(bool managedBusy READ managedBusy NOTIFY managedStatusChanged FINAL) // downloading slskd
+    Q_PROPERTY(bool managedFailed READ managedFailed NOTIFY managedStatusChanged FINAL)
     Q_PROPERTY(QString serverUrl READ serverUrl NOTIFY settingsChanged FINAL)
     Q_PROPERTY(QString apiKey READ apiKey NOTIFY settingsChanged FINAL)
     // What finished downloads become: "original" (moved as downloaded, no ffmpeg needed) or an
@@ -53,6 +61,11 @@ public:
 
     static SlskdController *create(QQmlEngine *qmlEngine, QJSEngine *jsEngine);
 
+    bool managed() const;
+    QString username() const;
+    QString managedStatus() const;
+    bool managedBusy() const;
+    bool managedFailed() const;
     QString serverUrl() const;
     QString apiKey() const;
     QString downloadFormat() const;
@@ -67,6 +80,13 @@ public:
 
     // Saves to QSettings. The key is optional and stored in plain text in the user's registry.
     Q_INVOKABLE void saveSettings(const QString &serverUrl, const QString &apiKey);
+    // Switches to grim.'s own slskd: stores the login (the password in the system's credential store),
+    // downloads slskd if needed and starts it. An empty password keeps the stored one.
+    Q_INVOKABLE void useManaged(const QString &username, const QString &password);
+    // Back to the user's own slskd; grim.'s copy stops.
+    Q_INVOKABLE void useOwn();
+    // Starts grim.'s slskd again after it failed (or retries the download).
+    Q_INVOKABLE void restartManaged();
     Q_INVOKABLE void checkStatus();
     // Shows "Checking" and asks slskd again (the title bar status was clicked, settings changed).
     Q_INVOKABLE void recheckStatus();
@@ -81,6 +101,7 @@ public:
 
 signals:
     void settingsChanged();
+    void managedStatusChanged();
     void statusChanged();
     void downloadFormatChanged();
     void searchingChanged();
@@ -93,6 +114,10 @@ private:
     void finishSearch();
     void setErrorText(const QString &text);
     void setStatus(Status status);
+    // Points the client at grim.'s slskd or the user's, and starts or stops grim.'s copy to match.
+    void applyServer();
+    // Polls the status every kStatusPollMs up to `checks` times (slskd may still be starting).
+    void pollStatus(int checks);
     // Queues every newly succeeded, not-yet-handled download for conversion.
     void convertFinished(const QList<SlskdDownload> &downloads);
     void importToLibrary(const QString &path, const QString &downloadId, const QString &doneNote);
@@ -107,7 +132,11 @@ private:
     QTimer *m_searchTimer;
     QTimer *m_downloadsTimer;
     QTimer *m_statusTimer;
-    int m_startupChecks = 0;
+    int m_statusChecksLeft = 0;
+    SlskdRunner *m_runner;
+    bool m_managed = false;
+    QString m_username;
+    QString m_managedApiKey; // random, accepted only from 127.0.0.1
     AudioConverter *m_converter;
     Status m_status = Checking;
 

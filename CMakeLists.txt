@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # For clangd. Only Ninja/Makefile generators emit it; see CMakePresets.json.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Quick Sql Network Concurrent Widgets Test)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Quick Sql Network Concurrent Widgets Test CorePrivate)
 if(NOT WIN32)
     # Linux: MPRIS / file manager over D-Bus, AAC/M4A decoding with FFmpeg's libraries.
     find_package(Qt6 REQUIRED COMPONENTS DBus)
@@ -98,6 +98,10 @@ add_library(musicplayer_core STATIC
     src/core/DiscordIpc.cpp
     src/core/ImgurUploader.h
     src/core/ImgurUploader.cpp
+    src/core/SlskdRunner.h
+    src/core/SlskdRunner.cpp
+    src/core/CredentialStore.h
+    src/core/CredentialStore.cpp
     src/audio/AudioEngine.h
     src/audio/AudioEngine.cpp
     src/audio/AacSource.h
@@ -110,11 +114,12 @@ target_compile_definitions(musicplayer_core PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN
 target_link_libraries(musicplayer_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
     PUBLIC miniaudio # AacSource.h exposes ma_data_source
-    PRIVATE tag musicplayer_warnings)
+    PRIVATE tag musicplayer_warnings
+    PRIVATE Qt6::CorePrivate) # QZipReader unpacks the slskd download
 # AAC/M4A decoding: Media Foundation on Windows, FFmpeg elsewhere (picked in AacSource.h).
 if(WIN32)
     target_sources(musicplayer_core PRIVATE src/audio/MfAudioSource.h src/audio/MfAudioSource.cpp)
-    target_link_libraries(musicplayer_core PRIVATE mfplat mfreadwrite mfuuid)
+    target_link_libraries(musicplayer_core PRIVATE mfplat mfreadwrite mfuuid advapi32) # advapi32: Credential Manager
 else()
     target_sources(musicplayer_core PRIVATE src/audio/FfmpegAudioSource.h src/audio/FfmpegAudioSource.cpp)
     target_link_libraries(musicplayer_core PRIVATE PkgConfig::FFMPEG Threads::Threads m)
@@ -391,6 +396,12 @@ qt_add_executable(tst_updatecheck tests/tst_updatecheck.cpp)
 target_link_libraries(tst_updatecheck PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
 add_test(NAME tst_updatecheck COMMAND tst_updatecheck)
 set_tests_properties(tst_updatecheck PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_slskdrunner tests/tst_slskdrunner.cpp)
+target_link_libraries(tst_slskdrunner PRIVATE musicplayer_core Qt6::Test Qt6::CorePrivate musicplayer_warnings)
+add_test(NAME tst_slskdrunner COMMAND tst_slskdrunner)
+set_tests_properties(tst_slskdrunner PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_userdatamigration tests/tst_userdatamigration.cpp)

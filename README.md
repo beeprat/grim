@@ -67,7 +67,9 @@ brisanje aplikacije ne briše ove podatke.
 
 ## podešavanje slskd
 
-**Soulseek:** pokrenuti slskd i ulogovati se u Soulseek, u grim., otvoriti podešavanja → slskd i ukucati adresu (podrazumevana: `http://localhost:5030`) i API key.
+**Soulseek:** u podešavanjima → Soulseek uključiti "Run slskd for me" i upisati Soulseek korisničko ime i lozinku. grim. sam preuzima [slskd](https://github.com/slskd/slskd) (oko 55 MB, AGPL-3.0) i pokreće ga samo dok je grim. otvoren. za brža preuzimanja otvoriti TCP port 50300 na ruteru.
+
+**svoj slskd:** isključiti "Run slskd for me", pa upisati adresu (podrazumevana: `http://localhost:5030`) i API key.
 ako slskd radi sa `--no-auth`, takođe ga započeti sa `--http-ip-address 127.0.0.1` da bi ga samo tvoj računar pristupio.
 statusna tačka u title baru pokazuje da li je slskd dostupan.
 

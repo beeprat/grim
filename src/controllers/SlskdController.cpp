@@ -1,12 +1,14 @@
 #include "controllers/SlskdController.h"
 
 #include "controllers/SettingsController.h"
+#include "core/CredentialStore.h"
 #include "core/LibraryFiles.h"
 
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
+#include <QRandomGenerator>
 #include <QSettings>
 #include <QTimer>
 
@@ -17,14 +19,20 @@ namespace {
 constexpr int kSearchPollMs = 1000;
 constexpr int kDownloadsPollMs = 1500;
 // Status is checked only while the app starts (slskd may still be launching), then on demand:
-// no background polling. kStartupChecks tries, kStatusPollMs apart.
+// no background polling. kStartupChecks tries, kStatusPollMs apart; grim.'s own slskd gets longer (it
+// starts with grim., and a first run sets up its database).
 constexpr int kStatusPollMs = 2000;
 constexpr int kStartupChecks = 5;
+constexpr int kManagedStartupChecks = 20;
 
 const auto kServerUrlKey = "slskd/serverUrl"_L1;
 const auto kDownloadFormatKey = "slskd/downloadFormat"_L1;
 const auto kOriginalFormat = "original"_L1;
 const auto kApiKeyKey = "slskd/apiKey"_L1;
+const auto kManagedKey = "slskd/managed"_L1;
+const auto kUsernameKey = "slskd/username"_L1;
+const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
+const auto kPasswordName = "slskd-password"_L1; // CredentialStore
 
 } // namespace
 
@@ -39,6 +47,7 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     , m_downloadsTimer(new QTimer(this))
     , m_statusTimer(new QTimer(this))
     , m_converter(new AudioConverter(this))
+    , m_runner(new SlskdRunner(this))
 {
     Q_ASSERT(!s_instance);
     s_instance = this;
@@ -50,7 +59,28 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     m_downloadFormat = stored.value(kDownloadFormatKey, u"m4a"_s).toString();
     if (m_downloadFormat != kOriginalFormat && !AudioConverter::formats().contains(m_downloadFormat))
         m_downloadFormat = u"m4a"_s;
-    m_client->setServer(QUrl(m_serverUrl), m_apiKey);
+    m_managed = stored.value(kManagedKey, false).toBool();
+    m_username = stored.value(kUsernameKey).toString();
+    // Only grim. and only this PC use it (slskd accepts it from 127.0.0.1 only), so plain QSettings is fine.
+    m_managedApiKey = stored.value(kManagedApiKeyKey).toString();
+    if (m_managedApiKey.size() < 32) {
+        m_managedApiKey.clear();
+        for (int i = 0; i < 4; ++i)
+            m_managedApiKey += QString::number(QRandomGenerator::system()->generate64(), 16).rightJustified(16, u'0');
+        QSettings().setValue(kManagedApiKeyKey, m_managedApiKey);
+    }
+
+    connect(m_runner, &SlskdRunner::stateChanged, this, [this, previous = m_runner->state()]() mutable {
+        const SlskdRunner::State state = m_runner->state();
+        // Just downloaded: start it. Just started: slskd answers within seconds, so look for it.
+        if (m_managed && previous == SlskdRunner::Downloading && state == SlskdRunner::Stopped)
+            applyServer();
+        else if (previous != SlskdRunner::Running && state == SlskdRunner::Running)
+            pollStatus(kManagedStartupChecks);
+        previous = state;
+        emit managedStatusChanged();
+    });
+    connect(this, &SlskdController::statusChanged, this, &SlskdController::managedStatusChanged);
 
     m_searchTimer->setInterval(kSearchPollMs);
     connect(m_searchTimer, &QTimer::timeout, this, &SlskdController::pollSearch);
@@ -75,13 +105,12 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
 
     m_statusTimer->setInterval(kStatusPollMs);
     connect(m_statusTimer, &QTimer::timeout, this, [this] {
-        if (++m_startupChecks >= kStartupChecks || m_status == Online)
+        if (--m_statusChecksLeft <= 0 || m_status == Online)
             m_statusTimer->stop();
         else
             checkStatus();
     });
-    m_statusTimer->start();
-    checkStatus();
+    applyServer();
 
     // Any failure stops polling, so a stopped slskd gives one message, not one per second.
     connect(m_client, &SlskdClient::errorOccurred, this, [this](const QString &message) {
@@ -95,6 +124,130 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
         // Without background polling, a failed request is the moment to update the status dot.
         checkStatus();
     });
+}
+
+void SlskdController::pollStatus(int checks)
+{
+    m_statusChecksLeft = checks;
+    m_statusTimer->start();
+    recheckStatus();
+}
+
+void SlskdController::applyServer()
+{
+    if (!m_managed) {
+        m_runner->stop();
+        m_client->setServer(QUrl(m_serverUrl), m_apiKey);
+        pollStatus(kStartupChecks);
+        return;
+    }
+    m_client->setServer(QUrl(m_runner->serverUrl()), m_managedApiKey);
+    switch (m_runner->state()) {
+    case SlskdRunner::NotInstalled:
+        m_runner->install(); // starts it once downloaded (stateChanged)
+        break;
+    case SlskdRunner::Stopped:
+        m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
+        break;
+    case SlskdRunner::Downloading:
+    case SlskdRunner::Running:
+    case SlskdRunner::Failed:
+        break;
+    }
+    setStatus(Checking);
+}
+
+void SlskdController::useManaged(const QString &username, const QString &password)
+{
+    const QString name = username.trimmed();
+    if (name.isEmpty())
+        return;
+    if (!password.isEmpty() && !CredentialStore::write(kPasswordName, password)) {
+        setErrorText(tr("Could not store the Soulseek password."));
+        return;
+    }
+    const bool loginChanged = name != m_username || !password.isEmpty();
+    m_managed = true;
+    m_username = name;
+    QSettings settings;
+    settings.setValue(kManagedKey, true);
+    settings.setValue(kUsernameKey, m_username);
+    setErrorText({});
+    emit settingsChanged();
+    // slskd reads the login at start: a new one needs a restart.
+    if (loginChanged && m_runner->state() == SlskdRunner::Running)
+        m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
+    else
+        applyServer();
+}
+
+void SlskdController::useOwn()
+{
+    if (!m_managed)
+        return;
+    m_managed = false;
+    QSettings().setValue(kManagedKey, false);
+    setErrorText({});
+    emit settingsChanged();
+    applyServer();
+}
+
+void SlskdController::restartManaged()
+{
+    if (!m_managed)
+        return;
+    // start() stops a running copy first; with no install it reports NotInstalled: download it again.
+    m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
+    if (m_runner->state() == SlskdRunner::NotInstalled)
+        m_runner->install();
+    setStatus(Checking);
+}
+
+bool SlskdController::managed() const
+{
+    return m_managed;
+}
+
+QString SlskdController::username() const
+{
+    return m_username;
+}
+
+bool SlskdController::managedBusy() const
+{
+    return m_runner->state() == SlskdRunner::Downloading;
+}
+
+bool SlskdController::managedFailed() const
+{
+    return m_runner->state() == SlskdRunner::Failed;
+}
+
+QString SlskdController::managedStatus() const
+{
+    switch (m_runner->state()) {
+    case SlskdRunner::NotInstalled:
+        return tr("slskd %1 will be downloaded from GitHub (about 55 MB).").arg(QLatin1StringView(SlskdRunner::kVersion));
+    case SlskdRunner::Downloading:
+        return tr("Downloading slskd… %1 %").arg(qRound(m_runner->progress() * 100));
+    case SlskdRunner::Stopped:
+        return tr("Stopped");
+    case SlskdRunner::Failed:
+        return m_runner->errorText();
+    case SlskdRunner::Running:
+        break;
+    }
+    switch (m_status) {
+    case Online:
+        return tr("Running, logged in to Soulseek as %1").arg(m_username);
+    case NotLoggedIn:
+        return tr("Running, but not logged in to Soulseek: check the username and password");
+    case Checking:
+    case Offline:
+    case AuthRequired:
+        break;
+    }
+    return tr("Starting slskd…");
 }
 
 SlskdController::~SlskdController()
@@ -217,10 +370,10 @@ void SlskdController::saveSettings(const QString &serverUrl, const QString &apiK
     QSettings settings;
     settings.setValue(kServerUrlKey, m_serverUrl);
     settings.setValue(kApiKeyKey, m_apiKey);
-    m_client->setServer(QUrl(m_serverUrl), m_apiKey);
     setErrorText({});
     emit settingsChanged();
-    recheckStatus();
+    if (!m_managed)
+        applyServer();
 }
 
 void SlskdController::recheckStatus()

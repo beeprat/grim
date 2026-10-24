@@ -529,9 +529,81 @@ Item {
                 }
 
                 SettingsPanel {
-                    SectionTitle { text: qsTr("slskd") }
+                    SectionTitle { text: qsTr("Soulseek") }
+
+                    // Default: grim. runs its own slskd; only the Soulseek login is needed.
+                    Switch {
+                        id: managedSwitch
+
+                        Layout.leftMargin: -6 // align the switch track with the text above
+                        text: qsTr("Run slskd for me")
+                        checked: SlskdController.managed
+                        onToggled: if (!checked) SlskdController.useOwn()
+                    }
 
                     RowLayout {
+                        visible: managedSwitch.checked
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        TextField {
+                            id: userField
+
+                            Layout.preferredWidth: 200
+                            placeholderText: qsTr("Soulseek username")
+                            text: SlskdController.username
+                        }
+
+                        TextField {
+                            id: passwordField
+
+                            Layout.fillWidth: true
+                            // Never shown back: an empty field keeps the stored password.
+                            placeholderText: SlskdController.managed ? qsTr("Password (saved)") : qsTr("Password")
+                            echoMode: TextInput.Password
+                        }
+
+                        Button {
+                            text: SlskdController.managed ? qsTr("Save") : qsTr("Start")
+                            enabled: !SlskdController.managedBusy && userField.text.trim() !== ""
+                                     && (SlskdController.managed ? userField.text !== SlskdController.username || passwordField.text !== ""
+                                                                 : passwordField.text !== "")
+                            onClicked: {
+                                SlskdController.useManaged(userField.text, passwordField.text)
+                                passwordField.text = ""
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        visible: managedSwitch.checked && SlskdController.managed
+                        spacing: 8
+
+                        Label {
+                            text: SlskdController.managedStatus
+                            color: SlskdController.managedFailed ? Material.color(Material.Red, Material.Shade300) : Material.foreground
+                            opacity: SlskdController.managedFailed ? 1 : 0.7
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                            Layout.maximumWidth: 460
+                        }
+
+                        Button {
+                            visible: SlskdController.managedFailed
+                            flat: true
+                            text: qsTr("Try again")
+                            onClicked: SlskdController.restartManaged()
+                        }
+                    }
+
+                    Hint {
+                        visible: managedSwitch.checked
+                        text: qsTr("grim. downloads slskd (AGPL-3.0, source at github.com/slskd/slskd) and runs it only while grim. is open, reachable only from this PC. The password is kept in the system's credential store. Downloads go to the library folder. For more and faster downloads, allow incoming TCP port 50300 in your router.")
+                    }
+
+                    // The user's own slskd.
+                    RowLayout {
+                        visible: !managedSwitch.checked
                         Layout.fillWidth: true
                         spacing: 8
 
@@ -560,7 +632,8 @@ Item {
                     }
 
                     Hint {
-                        text: qsTr("No API key is needed when slskd runs with --no-auth. Then also start it with --http-ip-address 127.0.0.1 so only this PC can reach it.")
+                        visible: !managedSwitch.checked
+                        text: qsTr("Your own slskd. No API key is needed when slskd runs with --no-auth. Then also start it with --http-ip-address 127.0.0.1 so only this PC can reach it.")
                     }
                 }
 
