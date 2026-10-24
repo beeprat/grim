@@ -248,6 +248,13 @@ Rectangle {
             padding: 0
             topInset: 0
             bottomInset: 0
+            leftInset: 0
+            rightInset: 0
+            // A circle filling the button; Material's ripple sat off the icon here.
+            background: Rectangle {
+                radius: width / 2
+                color: parent.pressed ? Qt.darker(Theme.subtle, 1.2) : parent.hovered ? Theme.subtle : "transparent"
+            }
             visible: SlskdController.managed
             iconName: SlskdController.managedRunning ? "stop" : "play"
             iconSize: 14
