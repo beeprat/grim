@@ -32,6 +32,7 @@ public:
 
     void setDownloads(QList<SlskdDownload> downloads);
     bool hasActive() const;
+    SlskdDownload at(int row) const { return m_downloads.value(row); }
     void setNote(const QString &downloadId, const QString &note);
 
 private:

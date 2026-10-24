@@ -101,6 +101,8 @@ public:
     Q_INVOKABLE void refreshDownloads();
     // Removes finished transfers from the Downloads list (in slskd too); active ones stay.
     Q_INVOKABLE void clearFinishedDownloads();
+    // Stops one running download; it stays listed as cancelled until cleared.
+    Q_INVOKABLE void cancelDownload(int row);
 
 signals:
     void settingsChanged();

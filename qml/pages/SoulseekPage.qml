@@ -561,6 +561,7 @@ Item {
                         delegate: ColumnLayout {
                             id: transfer
 
+                            required property int index
                             required property string fileName
                             required property string username
                             required property string state
@@ -571,10 +572,25 @@ Item {
                             width: ListView.view.width
                             spacing: 2
 
-                            Label {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: transfer.fileName
-                                elide: Text.ElideMiddle
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: transfer.fileName
+                                    elide: Text.ElideMiddle
+                                }
+
+                                ToolButton {
+                                    visible: !transfer.finished
+                                    text: "✕"
+                                    opacity: 0.7
+                                    implicitHeight: 28
+                                    ToolTip.text: qsTr("Cancel download")
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 500
+                                    onClicked: SlskdController.cancelDownload(transfer.index)
+                                }
                             }
 
                             ProgressBar {

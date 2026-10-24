@@ -314,6 +314,14 @@ void SlskdClient::clearFinishedDownloads(std::function<void()> onCleared)
            [onCleared = std::move(onCleared)](const QByteArray &) { onCleared(); });
 }
 
+void SlskdClient::cancelDownload(const SlskdDownload &download, std::function<void()> onCancelled)
+{
+    const QString path = u"transfers/downloads/"_s + QString::fromUtf8(QUrl::toPercentEncoding(download.username))
+                         + u'/' + QString::fromUtf8(QUrl::toPercentEncoding(download.id));
+    handle(m_network->deleteResource(request(path)),
+           [onCancelled = std::move(onCancelled)](const QByteArray &) { onCancelled(); });
+}
+
 void SlskdClient::fetchDownloads(std::function<void(QList<SlskdDownload>)> onDownloads)
 {
     handle(m_network->get(request(u"transfers/downloads"_s)),

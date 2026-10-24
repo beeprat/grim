@@ -121,6 +121,7 @@ public:
     void fetchDownloads(std::function<void(QList<SlskdDownload>)> onDownloads);
     // Removes every finished transfer (succeeded, failed, cancelled) from slskd's list; active ones stay.
     void clearFinishedDownloads(std::function<void()> onCleared);
+    void cancelDownload(const SlskdDownload &download, std::function<void()> onCancelled);
     // slskd's completed-downloads folder (options: directories.downloads). Needs an admin key or --no-auth.
     void fetchDownloadsDirectory(std::function<void(const QString &path)> onDirectory);
 

@@ -543,6 +543,14 @@ void SlskdController::clearFinishedDownloads()
     m_client->clearFinishedDownloads([this] { refreshDownloads(); });
 }
 
+void SlskdController::cancelDownload(int row)
+{
+    const SlskdDownload download = m_downloads->at(row);
+    if (download.id.isEmpty())
+        return;
+    m_client->cancelDownload(download, [this] { refreshDownloads(); });
+}
+
 void SlskdController::setErrorText(const QString &text)
 {
     if (text == m_errorText)
