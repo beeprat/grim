@@ -1,0 +1,45 @@
+#pragma once
+
+#include "models/Track.h"
+
+#include <QByteArray>
+#include <QList>
+#include <QString>
+#include <QStringList>
+
+// Fits a finished Soulseek download into the library: cleans its title, finds the album it belongs to among
+// the tracks already there, and takes that album's folder, artist, album name, year and cover, so a single
+// song added to an album does not end up as a second, slightly different album.
+namespace DownloadTagger {
+
+// Drops edition notes from a song title: "Help! (Remastered 2009)", "Help! [Deluxe Edition]",
+// "Help! - Remastered 2009", "Help! - 2015 Remaster" all give "Help!". Other brackets stay ("(Live)").
+QString cleanTitle(const QString &title);
+
+// Album name and artist reduced for comparing: case, "The ", punctuation and edition notes don't count.
+QString albumKey(const QString &album);
+QString artistKey(const QString &artist);
+
+struct AlbumMatch
+{
+    bool found = false;
+    QString folder;      // where most of the album's tracks are
+    QString artist;      // the most common value among the tracks in that folder
+    QString album;
+    int year = 0;        // 0: none of them has one
+    QStringList paths;   // the album's tracks in that folder (for the cover)
+};
+
+// The library album the download belongs to: same album name and artist (by the keys above). Nothing is
+// found for a download without an album tag.
+AlbumMatch findAlbum(const Track &download, const QList<Track> &library);
+
+// The cover most of these files have (embedded, or a cover file next to them). Empty if none has one.
+QByteArray majorityCover(const QStringList &paths);
+
+// Writes the non-empty values (year: non-zero) into the file's tags and, if `cover` is not empty, makes it the
+// only picture. Returns false if the file could not be saved.
+bool writeTags(const QString &path, const QString &title, const QString &artist, const QString &album, int year,
+               const QByteArray &cover);
+
+} // namespace DownloadTagger

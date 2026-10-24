@@ -19,6 +19,10 @@ bool isPlayable(const QString &filePath);
 QString moveIntoLibrary(const QString &filePath, const QString &downloadsRoot, const QString &libraryRoot,
                         QString *error);
 
+// Moves a file into `folder` (created if needed), with the same name-clash, cross-drive and
+// empty-source-folder handling as moveIntoLibrary.
+QString moveIntoFolder(const QString &filePath, const QString &folder, QString *error);
+
 // Deletes these music files, then each folder they were in that no longer holds any
 // playable file (cover art, .lrc, playlists and empty subfolders go with it), never the
 // library root or anything outside it. `remove` deletes one file or folder; the app passes

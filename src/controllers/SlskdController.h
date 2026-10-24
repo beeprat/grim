@@ -3,14 +3,18 @@
 #include "core/AudioConverter.h"
 #include "core/SlskdClient.h"
 #include "core/SlskdRunner.h"
+#include "models/Track.h"
 #include "providers/DownloadsModel.h"
 #include "providers/SearchGroupsModel.h"
 #include "providers/SearchResultsModel.h"
 
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QSet>
 #include <QtQml/qqmlregistration.h>
+
+#include <functional>
 
 class QJSEngine;
 class QQmlEngine;
@@ -60,6 +64,9 @@ public:
     ~SlskdController() override;
 
     static SlskdController *create(QQmlEngine *qmlEngine, QJSEngine *jsEngine);
+
+    // The library's tracks, so a download joins the album it belongs to (DownloadTagger).
+    void setLibraryTracks(std::function<QList<Track>()> tracks);
 
     bool managed() const;
     QString username() const;
@@ -132,6 +139,7 @@ private:
     SlskdRunner *m_runner;
     QString m_username;
     QString m_managedApiKey; // random, accepted only from 127.0.0.1
+    std::function<QList<Track>()> m_libraryTracks;
     bool m_stopped = false;   // stopped from the title bar
     AudioConverter *m_converter;
     Status m_status = Checking;

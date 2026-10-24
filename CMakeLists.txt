@@ -101,6 +101,8 @@ add_library(musicplayer_core STATIC
     src/core/SlskdRunner.h
     src/core/SlskdRunner.cpp
     src/core/CredentialStore.h
+    src/core/DownloadTagger.h
+    src/core/DownloadTagger.cpp
     src/core/CredentialStore.cpp
     src/audio/AudioEngine.h
     src/audio/AudioEngine.cpp
@@ -397,6 +399,12 @@ qt_add_executable(tst_updatecheck tests/tst_updatecheck.cpp)
 target_link_libraries(tst_updatecheck PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
 add_test(NAME tst_updatecheck COMMAND tst_updatecheck)
 set_tests_properties(tst_updatecheck PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_downloadtagger tests/tst_downloadtagger.cpp)
+target_link_libraries(tst_downloadtagger PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_downloadtagger COMMAND tst_downloadtagger)
+set_tests_properties(tst_downloadtagger PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_slskdrunner tests/tst_slskdrunner.cpp)

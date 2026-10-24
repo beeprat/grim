@@ -2,8 +2,11 @@
 
 #include "controllers/SettingsController.h"
 #include "core/CredentialStore.h"
+#include "core/DownloadTagger.h"
 #include "core/LibraryFiles.h"
+#include "core/TagReader.h"
 
+#include <QDebug>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -248,6 +251,11 @@ QString SlskdController::managedStatus() const
         break;
     }
     return tr("Starting slskd…");
+}
+
+void SlskdController::setLibraryTracks(std::function<QList<Track>()> tracks)
+{
+    m_libraryTracks = std::move(tracks);
 }
 
 SlskdController::~SlskdController()
@@ -495,8 +503,22 @@ void SlskdController::convertFinished(const QList<SlskdDownload> &downloads)
 
 void SlskdController::importToLibrary(const QString &path, const QString &downloadId, const QString &doneNote)
 {
+    // Join the album already in the library: its folder, artist, album name, year and cover. Edition notes
+    // ("(Remastered 2009)") leave the title either way.
+    const Track tags = TagReader::read(path);
+    const DownloadTagger::AlbumMatch match =
+        DownloadTagger::findAlbum(tags, m_libraryTracks ? m_libraryTracks() : QList<Track>());
+    const QString title = DownloadTagger::cleanTitle(tags.title);
+    // shortcut: covers are read on the GUI thread (one album's files); move to a worker if imports stutter.
+    const QByteArray cover = match.found ? DownloadTagger::majorityCover(match.paths) : QByteArray();
+    const bool retag = title != tags.title || match.found;
+    if (retag && !DownloadTagger::writeTags(path, title, match.artist, match.album, match.year, cover))
+        qWarning() << "SlskdController: could not retag" << path;
+
     QString error;
-    const QString moved = LibraryFiles::moveIntoLibrary(path, m_downloadsDirectory, m_settings.libraryFolder(), &error);
+    const QString moved = match.found
+                              ? LibraryFiles::moveIntoFolder(path, match.folder, &error)
+                              : LibraryFiles::moveIntoLibrary(path, m_downloadsDirectory, m_settings.libraryFolder(), &error);
     if (moved.isEmpty()) {
         m_downloads->setNote(downloadId, tr("Not added to the library: %1").arg(error));
         return;

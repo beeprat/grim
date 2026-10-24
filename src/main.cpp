@@ -17,6 +17,7 @@
 #include "core/StatsDatabase.h"
 #include "core/UserDataMigration.h"
 #include "providers/CoverImageProvider.h"
+#include "providers/LibraryModel.h"
 
 #include <QApplication>
 #include <QDir>
@@ -123,6 +124,7 @@ int main(int argc, char *argv[])
     PlaylistController playlists(libraryData, library);
     SlskdController slskd(settings);
     QObject::connect(&slskd, &SlskdController::trackImported, &library, &LibraryController::addFile);
+    slskd.setLibraryTracks([&library] { return library.tracks()->tracks(); });
     QObject::connect(&library, &LibraryController::aboutToDelete, &playerController, &PlayerController::releaseFiles);
     TrayController tray(settings, playerController, appIcon);
     UpdateController updates(QApplication::applicationVersion());

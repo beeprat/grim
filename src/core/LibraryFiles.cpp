@@ -41,7 +41,21 @@ QString moveIntoLibrary(const QString &filePath, const QString &downloadsRoot, c
     if (relativeDir == u"."_s)
         relativeDir.clear();
 
-    const QDir targetDir(QDir(libraryRoot).filePath(relativeDir));
+    return moveIntoFolder(filePath, QDir(libraryRoot).filePath(relativeDir), error);
+}
+
+QString moveIntoFolder(const QString &filePath, const QString &folder, QString *error)
+{
+    const auto fail = [error](const QString &message) {
+        if (error)
+            *error = message;
+        return QString();
+    };
+
+    const QFileInfo source(filePath);
+    if (!source.isFile())
+        return fail(QCoreApplication::translate("LibraryFiles", "%1 does not exist").arg(filePath));
+    const QDir targetDir(folder);
     if (!QDir().mkpath(targetDir.path()))
         return fail(QCoreApplication::translate("LibraryFiles", "Cannot create %1").arg(targetDir.path()));
 

@@ -135,6 +135,12 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   success, every failure once via `errorOccurred`. Status (`GET application`) is checked only at startup, after a
   failure and on click; no background polling. The API reports no local paths: find downloads by name under
   `directories.downloads` from `GET options`.
+- Download import (`SlskdController::importToLibrary`, `core/DownloadTagger`): the title loses edition notes
+  ("(Remastered 2009)", "[Deluxe Edition]", " - 2015 Remaster"). If the library already has the album (same album and
+  artist after `albumKey`/`artistKey`: case, "The ", punctuation and edition notes ignored), the file gets the folder
+  most of those tracks are in, their most common artist / album name / year, and their most common cover, then moves
+  there (`LibraryFiles::moveIntoFolder`); otherwise it goes in by its download folder as before. Library tracks come
+  from `setLibraryTracks` (main.cpp).
 - Download conversion (`core/AudioConverter`): ffmpeg from PATH, writes `<name>.converting.<ext>` (skipped by scans),
   copies tags with TagLib, then renames. Original goes to the Recycle Bin.
 - Last.fm (`core/LastFmClient`): signature = md5 of sorted params (no `format`) + secret. Queue sent in batches of
