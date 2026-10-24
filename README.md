@@ -13,7 +13,8 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 - statistike sa top trakama, albumima i izvođačima + export/import.
 - sinhronizovani tekstovi. (čitanje sa tagova fajla, `.lrc` fajla ili preko [LRCLIB](https://lrclib.net))
 - ocenjivanje pesama = prosečna ocena albuma.
-- in-program ažuriranje.
+- a-b looping.
+- in-program ažuriranje. (windows)
 - customization. (ograničeni)
 - mala download veličina.
 - speed i reverb slideri.
