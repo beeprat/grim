@@ -308,9 +308,6 @@ Item {
                         Button {
                             text: qsTr("Reload")
                             flat: true
-                            ToolTip.text: qsTr("Pick up translation files you added or edited")
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
                             onClicked: SettingsController.reloadLanguages()
                         }
 

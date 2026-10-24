@@ -90,9 +90,6 @@ Card {
                         onClicked: panel.albumClicked()
                     }
 
-                    ToolTip.text: qsTr("Show album in the library")
-                    ToolTip.visible: albumMouse.containsMouse
-                    ToolTip.delay: 600
                 }
 
                 Label {
@@ -115,9 +112,6 @@ Card {
                         onClicked: panel.artistClicked()
                     }
 
-                    ToolTip.text: qsTr("Show this artist's albums")
-                    ToolTip.visible: artistMouse.containsMouse
-                    ToolTip.delay: 600
                 }
             }
 

@@ -612,15 +612,6 @@ ApplicationWindow {
         highlighted: page >= 0 && root.page === page
         onClicked: if (page >= 0) root.page = page
 
-        // Beside the rail instead of the default spot above, which hides the icon above.
-        ToolTip {
-            x: navItem.width + 12
-            y: (navItem.height - height) / 2
-            text: navItem.text
-            visible: navItem.hovered
-            delay: 500
-        }
-
         background: Rectangle {
             radius: Math.min(Theme.radius, 12)
             color: navItem.highlighted ? Theme.selected

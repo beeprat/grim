@@ -471,9 +471,6 @@ Item {
                     flat: true
                     text: qsTr("Albums by %1").arg(LibraryController.artistFilter) + "   ✕"
                     Material.foreground: Theme.accent
-                    ToolTip.text: qsTr("Show all albums")
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 500
                     onClicked: LibraryController.artistFilter = ""
                 }
 
@@ -484,9 +481,6 @@ Item {
                     text: page.genreName(LibraryController.albums.genres.find(g => g.key === LibraryController.genreFilter)?.name ?? "")
                           + "   ✕"
                     Material.foreground: Theme.accent
-                    ToolTip.text: qsTr("All genres")
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 500
                     onClicked: LibraryController.genreFilter = ""
                 }
 
@@ -520,9 +514,6 @@ Item {
                             else
                                 viewSettings.trackSort = currentValue
                         }
-                        ToolTip.text: viewSettings.albums ? qsTr("Sort albums by") : qsTr("Sort tracks by")
-                        ToolTip.visible: hovered && !popup.visible
-                        ToolTip.delay: 600
                     }
 
                     TextField {
@@ -762,9 +753,6 @@ Item {
                                 onClicked: page.showArtist(page.openAlbumArtist)
                             }
 
-                            ToolTip.text: qsTr("Show this artist's albums")
-                            ToolTip.visible: albumArtistMouse.containsMouse
-                            ToolTip.delay: 600
                         }
 
                         Label {

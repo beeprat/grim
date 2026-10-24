@@ -24,7 +24,6 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     , m_player(player)
     , m_tray(new QSystemTrayIcon(icon, this))
 {
-    m_tray->setToolTip(QGuiApplication::applicationDisplayName());
     // The title of what is playing, centered, as a heading; clicking it opens the window.
     m_nowPlaying = new QToolButton;
     m_nowPlaying->setAutoRaise(true);
@@ -118,17 +117,13 @@ void TrayController::updateNowPlaying()
     if (!m_player.hasTrack()) {
         m_nowPlaying->setText(tr("Nothing playing"));
         m_nowPlaying->setEnabled(false);
-        m_tray->setToolTip(QGuiApplication::applicationDisplayName());
         return;
     }
-    const QString song = m_player.artist().isEmpty() ? m_player.title()
-                                                     : tr("%1 – %2").arg(m_player.title(), m_player.artist());
     // Cut to the menu's fixed width rather than widening the menu.
     const QString shown = m_nowPlaying->fontMetrics().elidedText(m_player.title(), Qt::ElideRight, kMenuWidth - 32);
     // "&" would turn the next letter into a keyboard shortcut.
     m_nowPlaying->setText(QString(shown).replace(u'&', u"&&"_s));
     m_nowPlaying->setEnabled(true);
-    m_tray->setToolTip(QGuiApplication::applicationDisplayName() + u" — "_s + song);
 }
 
 // The app's white icons, recolored to the menu's text color (the menu may be light).

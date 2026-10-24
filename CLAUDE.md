@@ -61,6 +61,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   calling `create()`. They get `static T *create(QQmlEngine *, QJSEngine *)` returning the `main.cpp` instance with
   `CppOwnership`.
 - Delegates use `required property`.
+- No tooltips anywhere (QML or tray), removed on request; `IconButton.tip` is only its `Accessible.name`.
 
 ## Pitfalls
 

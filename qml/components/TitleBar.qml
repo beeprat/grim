@@ -155,9 +155,6 @@ Rectangle {
         rightPadding: 12
         onClicked: UpdateController.install()
 
-        ToolTip.visible: hovered && UpdateController.state === UpdateController.Available
-        ToolTip.delay: 300
-        ToolTip.text: qsTr("Download and install it; grim. restarts by itself")
 
         background: Rectangle {
             radius: height / 2
@@ -270,10 +267,6 @@ Rectangle {
             hoverEnabled: true
             onClicked: SlskdController.recheckStatus()
 
-            ToolTip.visible: hovered
-            ToolTip.delay: 300
-            ToolTip.text: statusText + (SlskdController.status === SlskdController.Checking ? "" : "
-" + qsTr("Click to check again"))
 
             readonly property string statusText: {
                 switch (SlskdController.status) {

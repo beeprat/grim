@@ -180,9 +180,6 @@ Item {
                         rightPadding: playlistsCard.compact ? 0 : 16
                         onClicked: PlaylistController.currentId = modelData.id
 
-                        ToolTip.text: modelData.name
-                        ToolTip.visible: playlistsCard.compact && hovered
-                        ToolTip.delay: 400
 
                         background: Rectangle {
                             radius: Math.min(Theme.radius, 10)
@@ -281,9 +278,6 @@ Item {
                         Material.background: Theme.accent
                         Material.elevation: 0
                         opacity: enabled ? 1 : 0.4
-                        ToolTip.text: qsTr("Play")
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 600
                         onClicked: PlayerController.playQueue(PlaylistController.currentUrls(), 0)
                     }
                 }
@@ -406,9 +400,6 @@ Item {
                             ToolButton {
                                 text: "✕"
                                 opacity: row.hovered ? 0.7 : 0
-                                ToolTip.text: page.isFavorites ? qsTr("Remove from favorites") : qsTr("Remove from playlist")
-                                ToolTip.visible: hovered
-                                ToolTip.delay: 500
                                 onClicked: PlaylistController.removeTrack(row.index)
                             }
                         }

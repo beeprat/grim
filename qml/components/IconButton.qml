@@ -17,8 +17,6 @@ ToolButton {
     icon.height: iconSize
     icon.color: active ? Theme.accent : Material.foreground
     opacity: enabled ? 1 : 0.35
+    Accessible.name: tip
 
-    ToolTip.text: tip
-    ToolTip.visible: hovered && tip !== ""
-    ToolTip.delay: 600
 }

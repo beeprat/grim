@@ -207,9 +207,6 @@ Item {
                         Material.background: Theme.accent
                         Material.elevation: 0
                         opacity: enabled ? 1 : 0.4
-                        ToolTip.text: qsTr("Search")
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 600
                         onClicked: SlskdController.search(queryField.text)
                     }
                 }
@@ -283,9 +280,6 @@ Item {
                         // Reads `count` so it re-runs once the model is in: indexOfValue() is -1 before that.
                         currentIndex: count > 0 ? Math.max(0, indexOfValue(SlskdController.downloadFormat)) : -1
                         onActivated: SlskdController.downloadFormat = currentValue
-                        ToolTip.text: qsTr("Format finished downloads are converted to (needs ffmpeg). \"Save as original\" moves them into the library as downloaded.")
-                        ToolTip.visible: hovered && !popup.visible
-                        ToolTip.delay: 500
                     }
 
                     Item { Layout.fillWidth: true }
@@ -501,9 +495,6 @@ Item {
                             }
                         }
 
-                        ToolTip.text: result.folder
-                        ToolTip.visible: hovered && result.folder !== ""
-                        ToolTip.delay: 800
                     }
                 }
 
@@ -541,9 +532,6 @@ Item {
                         Button {
                             text: qsTr("Clear downloads")
                             flat: true
-                            ToolTip.text: qsTr("Removes finished downloads from the list. Downloads still running keep going.")
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
                             enabled: downloadsList.count > 0 && page.online
                             onClicked: SlskdController.clearFinishedDownloads()
                         }
@@ -586,9 +574,6 @@ Item {
                                     text: "✕"
                                     opacity: 0.7
                                     implicitHeight: 28
-                                    ToolTip.text: qsTr("Cancel download")
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: 500
                                     onClicked: SlskdController.cancelDownload(transfer.index)
                                 }
                             }
