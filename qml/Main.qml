@@ -937,6 +937,14 @@ ApplicationWindow {
                                 CompactMenu {
                                     id: deviceMenu
 
+                                    // As wide as the longest device name (within the window).
+                                    implicitWidth: {
+                                        let widest = 180
+                                        for (let i = 0; i < count; ++i)
+                                            widest = Math.max(widest, itemAt(i)?.implicitWidth ?? 0)
+                                        return Math.min(widest + leftPadding + rightPadding, root.width - 120)
+                                    }
+
                                     CompactMenuItem {
                                         text: qsTr("System default")
                                         checkable: true
