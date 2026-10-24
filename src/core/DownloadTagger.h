@@ -12,9 +12,14 @@
 // song added to an album does not end up as a second, slightly different album.
 namespace DownloadTagger {
 
-// Drops edition notes from a song title: "Help! (Remastered 2009)", "Help! [Deluxe Edition]",
+// Drops edition notes from a song title: "Help! (Remastered 2009)", "Help! [Deluxe Edition]", "(50th Anniversary)",
 // "Help! - Remastered 2009", "Help! - 2015 Remaster" all give "Help!". Other brackets stay ("(Live)").
 QString cleanTitle(const QString &title);
+
+// Drops a leading track number from a file name ("01 Help!.m4a", "01 - Help!.m4a", "1-01. Help!.m4a" give
+// "Help!.m4a"): the number is in the tags. Only when it is `trackNumber` or zero-padded, so "99 Problems.mp3"
+// stays.
+QString cleanFileName(const QString &fileName, int trackNumber);
 
 // Album name and artist reduced for comparing: case, "The ", punctuation and edition notes don't count.
 QString albumKey(const QString &album);

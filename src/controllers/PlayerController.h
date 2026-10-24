@@ -37,6 +37,8 @@ class PlayerController : public QObject
     Q_PROPERTY(bool playing READ playing NOTIFY playingChanged FINAL)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY positionChanged FINAL)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged FINAL)
+    // Settings → Playback → Mono; saved at once.
+    Q_PROPERTY(bool mono READ mono WRITE setMono NOTIFY monoChanged FINAL)
     // [{time, text}] from the file's LYRICS tag or a sidecar .lrc; time is -1 when unsynced.
     Q_PROPERTY(QVariantList lyrics READ lyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool lyricsSynced READ lyricsSynced NOTIFY lyricsChanged FINAL)
@@ -81,6 +83,8 @@ public:
     qint64 positionMs() const;
     double volume() const;
     void setVolume(double volume);
+    bool mono() const;
+    void setMono(bool mono);
     QVariantList lyrics() const;
     bool lyricsSynced() const;
     bool lyricsLoading() const;
@@ -139,6 +143,7 @@ signals:
     void playingChanged();
     void positionChanged();
     void volumeChanged();
+    void monoChanged();
     void shuffleChanged();
     void repeatChanged();
     void loopChanged();
@@ -211,6 +216,7 @@ private:
     bool m_playing = false;
     qint64 m_positionMs = 0;
     double m_volume = 1.0;
+    bool m_mono = false;
 
     // Current listening session: wall-clock time actually spent playing,
     // so pauses and seeks never inflate it.

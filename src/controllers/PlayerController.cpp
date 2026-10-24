@@ -36,6 +36,7 @@ const auto kLastQueueKey = QStringLiteral("player/lastQueue");
 const auto kLastIndexKey = QStringLiteral("player/lastIndex");
 const auto kLastPositionKey = QStringLiteral("player/lastPositionMs");
 const auto kVolumeKey = QStringLiteral("player/volume");
+const auto kMonoKey = QStringLiteral("player/mono");
 const auto kShuffleKey = QStringLiteral("player/shuffle");
 const auto kRepeatKey = QStringLiteral("player/repeat");
 
@@ -62,6 +63,8 @@ PlayerController::PlayerController(StatsDatabase &stats, QObject *parent)
     const QSettings settings;
     m_volume = std::clamp(settings.value(kVolumeKey, 1.0).toDouble(), 0.0, 1.0);
     m_engine.setVolume(static_cast<float>(m_volume));
+    m_mono = settings.value(kMonoKey, false).toBool();
+    m_engine.setMono(m_mono);
     m_shuffle = settings.value(kShuffleKey, false).toBool();
     m_repeat = static_cast<Repeat>(std::clamp(settings.value(kRepeatKey, int(RepeatOff)).toInt(), int(RepeatOff),
                                               int(RepeatOne)));
@@ -141,6 +144,21 @@ void PlayerController::setVolume(double volume)
     m_volume = volume;
     m_engine.setVolume(static_cast<float>(volume));
     emit volumeChanged();
+}
+
+bool PlayerController::mono() const
+{
+    return m_mono;
+}
+
+void PlayerController::setMono(bool mono)
+{
+    if (mono == m_mono)
+        return;
+    m_mono = mono;
+    m_engine.setMono(mono);
+    QSettings().setValue(kMonoKey, mono);
+    emit monoChanged();
 }
 
 QVariantList PlayerController::lyrics() const

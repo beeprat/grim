@@ -550,6 +550,14 @@ Item {
                             padding: 0
                             topInset: 0
                             bottomInset: 0
+                            leftInset: 0
+                            rightInset: 0
+                            // A circle filling the button; Material's ripple sat off the icon here.
+                            background: Rectangle {
+                                radius: width / 2
+                                color: clearSearch.pressed ? Qt.darker(Theme.subtle, 1.2)
+                                     : clearSearch.hovered ? Theme.subtle : "transparent"
+                            }
                             iconName: "close"
                             iconSize: 16
                             visible: searchField.text !== ""

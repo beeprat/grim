@@ -353,6 +353,13 @@ Item {
                 SettingsPanel {
                     SectionTitle { text: qsTr("Playback") }
 
+                    Switch {
+                        Layout.leftMargin: -6 // align the switch track with the text above
+                        text: qsTr("Mono")
+                        checked: PlayerController.mono
+                        onToggled: PlayerController.mono = checked
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 12

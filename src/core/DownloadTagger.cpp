@@ -17,8 +17,9 @@ namespace DownloadTagger {
 
 namespace {
 
-// An edition note: remaster(ed), deluxe, with whatever else the bracket or dash part holds ("2009", "Edition").
-const QString kEdition = u"(?:remaster(?:ed)?|deluxe)"_s;
+// An edition note: remaster(ed), deluxe, anniversary, with whatever else the bracket or dash part holds
+// ("2009", "Edition", "50th"). An anniversary edition's tracks thus join the original album.
+const QString kEdition = u"(?:remaster(?:ed)?|deluxe|anniversary)"_s;
 
 // The value most of `values` have (ignoring empty ones); ties go to the first seen.
 template<typename T, typename IsEmpty>
@@ -81,6 +82,22 @@ QString artistKey(const QString &artist)
     if (key.startsWith(u"the "_s))
         key.remove(0, 4);
     return key;
+}
+
+QString cleanFileName(const QString &fileName, int trackNumber)
+{
+    // "01 ", "01. ", "01 - ", "1-01 " (disc-track): the last number is the track.
+    static const QRegularExpression number(u"^(?:\\d{1,2}[-.])?(\\d{1,3})(?:\\s*[-–._]\\s*|\\s+)"_s);
+    const QRegularExpressionMatch found = number.match(fileName);
+    if (!found.hasMatch())
+        return fileName;
+    // Only a real track number: the tag's, or zero-padded ("07"). "99 Problems.mp3" keeps its 99.
+    const QString digits = found.captured(1);
+    if (digits.toInt() != trackNumber && !(digits.size() > 1 && digits.startsWith(u'0')))
+        return fileName;
+    const QString cleaned = fileName.mid(found.capturedLength());
+    // Keep the number if nothing but the extension would be left ("01.mp3").
+    return cleaned.lastIndexOf(u'.') <= 0 || cleaned.startsWith(u' ') ? fileName : cleaned;
 }
 
 AlbumMatch findAlbum(const Track &download, const QList<Track> &library)

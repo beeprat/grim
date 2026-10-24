@@ -83,6 +83,45 @@ private slots:
         QCOMPARE(DownloadTagger::cleanTitle(title), expected);
     }
 
+    void dropsTrackNumbersFromFileNames_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<int>("track");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("space") << u"01 Help!.m4a"_s << 1 << u"Help!.m4a"_s;
+        QTest::newRow("dash") << u"01 - Help!.m4a"_s << 1 << u"Help!.m4a"_s;
+        QTest::newRow("dot") << u"01. Help!.m4a"_s << 1 << u"Help!.m4a"_s;
+        QTest::newRow("disc-track") << u"1-07 Help!.m4a"_s << 7 << u"Help!.m4a"_s;
+        QTest::newRow("padded, no tag") << u"07 Help!.m4a"_s << 0 << u"Help!.m4a"_s;
+        QTest::newRow("title number") << u"99 Problems.mp3"_s << 0 << u"99 Problems.mp3"_s;
+        QTest::newRow("title number, other track") << u"99 Problems.mp3"_s << 4 << u"99 Problems.mp3"_s;
+        QTest::newRow("only number") << u"01.mp3"_s << 1 << u"01.mp3"_s;
+        QTest::newRow("none") << u"Help!.m4a"_s << 1 << u"Help!.m4a"_s;
+    }
+
+    void dropsTrackNumbersFromFileNames()
+    {
+        QFETCH(QString, name);
+        QFETCH(int, track);
+        QFETCH(QString, expected);
+        QCOMPARE(DownloadTagger::cleanFileName(name, track), expected);
+    }
+
+    void anniversaryEditionJoinsTheOriginalAlbum()
+    {
+        const QList<Track> library = {
+            track(u"C:/Music/Abbey Road/a.m4a"_s, u"The Beatles"_s, u"Abbey Road"_s, 1969),
+            track(u"C:/Music/Abbey Road/b.m4a"_s, u"The Beatles"_s, u"Abbey Road"_s, 1969),
+        };
+        const Track download = track(u"C:/D/Something.mp3"_s, u"The Beatles"_s,
+                                     u"Abbey Road (Super Deluxe 50th Anniversary Edition)"_s, 2019);
+        const DownloadTagger::AlbumMatch match = DownloadTagger::findAlbum(download, library);
+        QVERIFY(match.found);
+        QCOMPARE(match.album, u"Abbey Road"_s);
+        QCOMPARE(match.year, 1969);
+        QCOMPARE(DownloadTagger::cleanTitle(u"Something (2019 Mix) [50th Anniversary]"_s), u"Something (2019 Mix)"_s);
+    }
+
     void findsTheFolderMostOfTheAlbumIsIn()
     {
         const QList<Track> library = {

@@ -37,6 +37,7 @@ struct EffectsNode
     ma_uint32 channels = 2;
     Reverb reverb;
     std::atomic<float> reverbAmount{0};
+    std::atomic<bool> mono{false};
     // Mixing-thread state.
     float appliedReverb = 0;
 
@@ -59,6 +60,14 @@ struct EffectsNode
         }
         if (amount > 0 && self->channels == 2) // the reverb is stereo
             self->reverb.process(out, frames);
+
+        // Mono: both channels get their average (after the reverb, so all of it is heard on each side).
+        if (self->channels == 2 && self->mono.load(std::memory_order_relaxed)) {
+            for (ma_uint32 i = 0; i < frames; ++i) {
+                const float mid = 0.5f * (out[2 * i] + out[2 * i + 1]);
+                out[2 * i] = out[2 * i + 1] = mid;
+            }
+        }
 
         *frameCountIn = frames;
         *frameCountOut = frames;
@@ -361,6 +370,11 @@ void AudioEngine::setSpeed(float speed)
         if (slot.loaded)
             ma_sound_set_pitch(&slot.sound, speed);
     }
+}
+
+void AudioEngine::setMono(bool mono)
+{
+    m_impl->effects.mono.store(mono, std::memory_order_relaxed);
 }
 
 void AudioEngine::setReverb(float amount)

@@ -7,6 +7,7 @@
 #include "core/TagReader.h"
 
 #include <QDebug>
+#include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -515,10 +516,19 @@ void SlskdController::importToLibrary(const QString &path, const QString &downlo
     if (retag && !DownloadTagger::writeTags(path, title, match.artist, match.album, match.year, cover))
         qWarning() << "SlskdController: could not retag" << path;
 
+    // No track number in the file name ("01 Help!.m4a"): it is in the tags. Renamed in the download folder,
+    // so the move below keeps its no-overwrite handling.
+    QString source = path;
+    const QFileInfo info(path);
+    const QString fileName = DownloadTagger::cleanFileName(info.fileName(), tags.trackNumber);
+    if (fileName != info.fileName() && !QFileInfo::exists(info.dir().filePath(fileName))
+        && QFile::rename(path, info.dir().filePath(fileName)))
+        source = info.dir().filePath(fileName);
+
     QString error;
     const QString moved = match.found
-                              ? LibraryFiles::moveIntoFolder(path, match.folder, &error)
-                              : LibraryFiles::moveIntoLibrary(path, m_downloadsDirectory, m_settings.libraryFolder(), &error);
+                              ? LibraryFiles::moveIntoFolder(source, match.folder, &error)
+                              : LibraryFiles::moveIntoLibrary(source, m_downloadsDirectory, m_settings.libraryFolder(), &error);
     if (moved.isEmpty()) {
         m_downloads->setNote(downloadId, tr("Not added to the library: %1").arg(error));
         return;

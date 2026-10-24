@@ -58,6 +58,8 @@ public:
     // lower, like a slowed-down record); reverb 0..1.
     void setSpeed(float speed);
     void setReverb(float amount);
+    // Plays both channels as their average (one earbud, uneven hearing).
+    void setMono(bool mono);
 
 private:
     struct Impl;
