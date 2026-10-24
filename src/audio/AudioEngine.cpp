@@ -291,6 +291,13 @@ bool AudioEngine::hasTrack() const
 
 void AudioEngine::play()
 {
+    // Windows can stop the output device while idle (sleeping headphones, display off, device
+    // change); the engine then stays stopped and sounds play into nothing.
+    if (ma_device *device = ma_engine_get_device(&m_impl->engine);
+        m_impl->engineReady && device && ma_device_get_state(device) != ma_device_state_started) {
+        if (const ma_result result = ma_engine_start(&m_impl->engine); result != MA_SUCCESS)
+            std::fprintf(stderr, "AudioEngine: cannot restart output device: %s\n", ma_result_description(result));
+    }
     if (m_impl->active().loaded)
         ma_sound_start(&m_impl->active().sound);
 }
