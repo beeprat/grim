@@ -129,7 +129,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   auth on with a random key (`slskd/managedApiKey`, cidr 127.0.0.1/32). Dies with grim. (job object / PDEATHSIG);
   unexpected exits retried 3 times. Login: `slskd/username`, password via `core/CredentialStore` (Credential Manager
   `grimPlayer/slskd-password`; Linux 0600 file). Settings → Soulseek is only that login; nothing runs until a
-  username is set. Connecting to a slskd the user runs themselves was removed on request.
+  username is set. Connecting to a slskd the user runs themselves was removed on request. The title bar's
+  start/stop button (`managedRunning`) is remembered in `slskd/stopped`; saving the login clears it.
 - slskd (`core/SlskdClient`, API v0, `X-API-Key`, endpoints follow llehouerou/waves `client.go`): callbacks only on
   success, every failure once via `errorOccurred`. Status (`GET application`) is checked only at startup, after a
   failure and on click; no background polling. The API reports no local paths: find downloads by name under

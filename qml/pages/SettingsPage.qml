@@ -542,6 +542,7 @@ Item {
                             Layout.preferredWidth: 200
                             placeholderText: qsTr("Soulseek username")
                             text: SlskdController.username
+                            onAccepted: if (saveLogin.enabled) saveLogin.clicked()
                         }
 
                         TextField {
@@ -551,9 +552,13 @@ Item {
                             // Never shown back: an empty field keeps the stored password.
                             placeholderText: SlskdController.managed ? qsTr("Password (saved)") : qsTr("Password")
                             echoMode: TextInput.Password
+                            // Enter = the button.
+                            onAccepted: if (saveLogin.enabled) saveLogin.clicked()
                         }
 
                         Button {
+                            id: saveLogin
+
                             text: SlskdController.managed ? qsTr("Save") : qsTr("Start")
                             enabled: !SlskdController.managedBusy && userField.text.trim() !== ""
                                      && (SlskdController.managed ? userField.text !== SlskdController.username || passwordField.text !== ""

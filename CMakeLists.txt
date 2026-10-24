@@ -245,6 +245,7 @@ qt_add_qml_module(MusicPlayer
         qml/icons/repeat_one.svg
         qml/icons/settings.svg
         qml/icons/shuffle.svg
+        qml/icons/stop.svg
         qml/icons/soulseek.svg
         qml/icons/statistics.svg
         qml/icons/volume.svg

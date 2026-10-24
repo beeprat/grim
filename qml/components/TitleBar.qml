@@ -240,6 +240,20 @@ Rectangle {
             color: Qt.rgba(1, 1, 1, 0.2)
         }
 
+        // Starts or stops grim.'s slskd (it runs in the background otherwise).
+        IconButton {
+            Layout.preferredWidth: 28
+            Layout.preferredHeight: 28
+            Layout.alignment: Qt.AlignVCenter
+            padding: 0
+            topInset: 0
+            bottomInset: 0
+            visible: SlskdController.managed
+            iconName: SlskdController.managedRunning ? "stop" : "play"
+            iconSize: 14
+            onClicked: SlskdController.managedRunning = !SlskdController.managedRunning
+        }
+
         // slskd status, checked while the app starts. Click to check again.
         AbstractButton {
             id: status

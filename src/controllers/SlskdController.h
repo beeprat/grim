@@ -32,6 +32,9 @@ class SlskdController : public QObject
     Q_PROPERTY(QString managedStatus READ managedStatus NOTIFY managedStatusChanged FINAL)
     Q_PROPERTY(bool managedBusy READ managedBusy NOTIFY managedStatusChanged FINAL) // downloading slskd
     Q_PROPERTY(bool managedFailed READ managedFailed NOTIFY managedStatusChanged FINAL)
+    // The title bar's start/stop button. Stopping is remembered across restarts (it saves CPU, memory and
+    // network while Soulseek isn't needed).
+    Q_PROPERTY(bool managedRunning READ managedRunning WRITE setManagedRunning NOTIFY managedStatusChanged FINAL)
     // What finished downloads become: "original" (moved as downloaded, no ffmpeg needed) or an
     // AudioConverter format ("m4a", "mp3", "flac"). Default "m4a".
     Q_PROPERTY(QString downloadFormat READ downloadFormat WRITE setDownloadFormat NOTIFY downloadFormatChanged FINAL)
@@ -63,6 +66,8 @@ public:
     QString managedStatus() const;
     bool managedBusy() const;
     bool managedFailed() const;
+    bool managedRunning() const;
+    void setManagedRunning(bool running);
     QString downloadFormat() const;
     void setDownloadFormat(const QString &format);
     Status status() const;
@@ -127,6 +132,7 @@ private:
     SlskdRunner *m_runner;
     QString m_username;
     QString m_managedApiKey; // random, accepted only from 127.0.0.1
+    bool m_stopped = false;   // stopped from the title bar
     AudioConverter *m_converter;
     Status m_status = Checking;
 

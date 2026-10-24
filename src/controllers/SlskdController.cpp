@@ -28,6 +28,7 @@ const auto kDownloadFormatKey = "slskd/downloadFormat"_L1;
 const auto kOriginalFormat = "original"_L1;
 const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
+const auto kStoppedKey = "slskd/stopped"_L1;
 const auto kPasswordName = "slskd-password"_L1; // CredentialStore
 
 } // namespace
@@ -53,6 +54,7 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     if (m_downloadFormat != kOriginalFormat && !AudioConverter::formats().contains(m_downloadFormat))
         m_downloadFormat = u"m4a"_s;
     m_username = stored.value(kUsernameKey).toString();
+    m_stopped = stored.value(kStoppedKey, false).toBool();
     // Only grim. and only this PC use it (slskd accepts it from 127.0.0.1 only), so plain QSettings is fine.
     m_managedApiKey = stored.value(kManagedApiKeyKey).toString();
     if (m_managedApiKey.size() < 32) {
@@ -130,11 +132,11 @@ void SlskdController::applyServer()
     m_client->setServer(QUrl(m_runner->serverUrl()), m_managedApiKey);
     switch (m_runner->state()) {
     case SlskdRunner::NotInstalled:
-        if (managed())
+        if (managed() && !m_stopped)
             m_runner->install(); // starts it once downloaded (stateChanged)
         break;
     case SlskdRunner::Stopped:
-        if (managed())
+        if (managed() && !m_stopped)
             m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
         break;
     case SlskdRunner::Downloading:
@@ -142,7 +144,7 @@ void SlskdController::applyServer()
     case SlskdRunner::Failed:
         break;
     }
-    setStatus(managed() ? Checking : Offline);
+    setStatus(managed() && !m_stopped ? Checking : Offline);
 }
 
 void SlskdController::useManaged(const QString &username, const QString &password)
@@ -155,7 +157,10 @@ void SlskdController::useManaged(const QString &username, const QString &passwor
         return;
     }
     m_username = name;
-    QSettings().setValue(kUsernameKey, m_username);
+    m_stopped = false; // saving the login means "start it"
+    QSettings settings;
+    settings.setValue(kUsernameKey, m_username);
+    settings.setValue(kStoppedKey, false);
     setErrorText({});
     emit settingsChanged();
     // slskd reads the login at start: (re)start it, or download it first.
@@ -174,6 +179,26 @@ void SlskdController::restartManaged()
     if (m_runner->state() == SlskdRunner::NotInstalled)
         m_runner->install();
     setStatus(Checking);
+}
+
+bool SlskdController::managedRunning() const
+{
+    return !m_stopped && managed();
+}
+
+void SlskdController::setManagedRunning(bool running)
+{
+    if (running == managedRunning() || !managed())
+        return;
+    m_stopped = !running;
+    QSettings().setValue(kStoppedKey, m_stopped);
+    if (running) {
+        restartManaged();
+    } else {
+        m_runner->stop();
+        setStatus(Offline);
+    }
+    emit managedStatusChanged();
 }
 
 bool SlskdController::managed() const
@@ -206,7 +231,7 @@ QString SlskdController::managedStatus() const
     case SlskdRunner::Downloading:
         return tr("Downloading slskd… %1 %").arg(qRound(m_runner->progress() * 100));
     case SlskdRunner::Stopped:
-        return tr("Stopped");
+        return m_stopped ? tr("Stopped: start it from the title bar") : tr("Stopped");
     case SlskdRunner::Failed:
         return m_runner->errorText();
     case SlskdRunner::Running:
