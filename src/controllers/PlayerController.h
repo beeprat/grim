@@ -39,6 +39,8 @@ class PlayerController : public QObject
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged FINAL)
     // Settings → Playback → Mono; saved at once.
     Q_PROPERTY(bool mono READ mono WRITE setMono NOTIFY monoChanged FINAL)
+    // Output device name; empty = system default. Saved at once.
+    Q_PROPERTY(QString outputDevice READ outputDevice WRITE setOutputDevice NOTIFY outputDeviceChanged FINAL)
     // [{time, text}] from the file's LYRICS tag or a sidecar .lrc; time is -1 when unsynced.
     Q_PROPERTY(QVariantList lyrics READ lyrics NOTIFY lyricsChanged FINAL)
     Q_PROPERTY(bool lyricsSynced READ lyricsSynced NOTIFY lyricsChanged FINAL)
@@ -85,6 +87,10 @@ public:
     void setVolume(double volume);
     bool mono() const;
     void setMono(bool mono);
+    QString outputDevice() const { return m_outputDevice; }
+    void setOutputDevice(const QString &name);
+    // Listed fresh on each call (devices come and go).
+    Q_INVOKABLE QStringList outputDevices() const;
     QVariantList lyrics() const;
     bool lyricsSynced() const;
     bool lyricsLoading() const;
@@ -144,6 +150,7 @@ signals:
     void positionChanged();
     void volumeChanged();
     void monoChanged();
+    void outputDeviceChanged();
     void shuffleChanged();
     void repeatChanged();
     void loopChanged();
@@ -217,6 +224,7 @@ private:
     qint64 m_positionMs = 0;
     double m_volume = 1.0;
     bool m_mono = false;
+    QString m_outputDevice;
 
     // Current listening session: wall-clock time actually spent playing,
     // so pauses and seeks never inflate it.

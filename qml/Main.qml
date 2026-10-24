@@ -919,6 +919,49 @@ ApplicationWindow {
                                 onClicked: root.resetPanelRects()
                             }
 
+                            // Output device; the list is read when the menu opens (devices come and go).
+                            NavButton {
+                                id: deviceButton
+
+                                property var devices: []
+
+                                text: PlayerController.outputDevice !== "" ? PlayerController.outputDevice
+                                                                           : qsTr("Output device: system default")
+                                icon.source: "icons/speaker.svg"
+                                highlighted: deviceMenu.visible
+                                onClicked: {
+                                    devices = PlayerController.outputDevices()
+                                    deviceMenu.popup(width + 4, 0)
+                                }
+
+                                CompactMenu {
+                                    id: deviceMenu
+
+                                    CompactMenuItem {
+                                        text: qsTr("System default")
+                                        checkable: true
+                                        checked: PlayerController.outputDevice === ""
+                                        onTriggered: PlayerController.outputDevice = ""
+                                    }
+
+                                    Instantiator {
+                                        model: deviceButton.devices
+
+                                        delegate: CompactMenuItem {
+                                            required property string modelData
+
+                                            text: modelData
+                                            checkable: true
+                                            checked: PlayerController.outputDevice === modelData
+                                            onTriggered: PlayerController.outputDevice = modelData
+                                        }
+
+                                        onObjectAdded: (index, item) => deviceMenu.insertItem(index + 1, item)
+                                        onObjectRemoved: (index, item) => deviceMenu.removeItem(item)
+                                    }
+                                }
+                            }
+
                             NavButton { page: 4; text: qsTr("Settings"); icon.source: "icons/settings.svg" }
                         }
                     }

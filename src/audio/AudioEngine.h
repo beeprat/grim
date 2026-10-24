@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
-// Plays one track at a time on the default output device (miniaudio, WASAPI).
+// Plays one track at a time on an output device (miniaudio, WASAPI), the system default unless set.
 // WAV/FLAC/MP3 decode in miniaudio; M4A/AAC through AacSource (Media Foundation on Windows, FFmpeg on Linux).
 // Call every method from one thread (the GUI thread). miniaudio decodes on its
 // own job thread and mixes on the device thread; the calls used here are safe
@@ -60,6 +62,12 @@ public:
     void setReverb(float amount);
     // Plays both channels as their average (one earbud, uneven hearing).
     void setMono(bool mono);
+
+    // Output device names, for setOutputDevice().
+    std::vector<std::string> outputDevices() const;
+    // Reopens the output on the device with this name (UTF-8); empty or unknown = system default.
+    // Unloads everything: the caller reloads its track.
+    void setOutputDevice(const std::string &name);
 
 private:
     struct Impl;

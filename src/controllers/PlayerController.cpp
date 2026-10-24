@@ -37,6 +37,7 @@ const auto kLastIndexKey = QStringLiteral("player/lastIndex");
 const auto kLastPositionKey = QStringLiteral("player/lastPositionMs");
 const auto kVolumeKey = QStringLiteral("player/volume");
 const auto kMonoKey = QStringLiteral("player/mono");
+const auto kOutputDeviceKey = QStringLiteral("player/outputDevice");
 const auto kShuffleKey = QStringLiteral("player/shuffle");
 const auto kRepeatKey = QStringLiteral("player/repeat");
 
@@ -65,6 +66,9 @@ PlayerController::PlayerController(StatsDatabase &stats, QObject *parent)
     m_engine.setVolume(static_cast<float>(m_volume));
     m_mono = settings.value(kMonoKey, false).toBool();
     m_engine.setMono(m_mono);
+    m_outputDevice = settings.value(kOutputDeviceKey).toString();
+    if (!m_outputDevice.isEmpty())
+        m_engine.setOutputDevice(m_outputDevice.toStdString());
     m_shuffle = settings.value(kShuffleKey, false).toBool();
     m_repeat = static_cast<Repeat>(std::clamp(settings.value(kRepeatKey, int(RepeatOff)).toInt(), int(RepeatOff),
                                               int(RepeatOne)));
@@ -159,6 +163,36 @@ void PlayerController::setMono(bool mono)
     m_engine.setMono(mono);
     QSettings().setValue(kMonoKey, mono);
     emit monoChanged();
+}
+
+QStringList PlayerController::outputDevices() const
+{
+    QStringList names;
+    for (const std::string &name : m_engine.outputDevices())
+        names.append(QString::fromStdString(name));
+    return names;
+}
+
+void PlayerController::setOutputDevice(const QString &name)
+{
+    if (name == m_outputDevice)
+        return;
+    m_outputDevice = name;
+    QSettings().setValue(kOutputDeviceKey, name);
+
+    // Reopening the output unloads the track: load it again where it was.
+    const bool hadTrack = m_engine.hasTrack();
+    const bool wasPlaying = m_engine.isPlaying();
+    const qint64 position = m_engine.positionMs();
+    m_engine.setOutputDevice(name.toStdString());
+    m_queueTried = false;
+    if (hadTrack && m_engine.load(QFileInfo(m_track.path).filesystemFilePath())) {
+        refreshReplayGain();
+        m_engine.seek(position);
+        if (wasPlaying)
+            m_engine.play();
+    }
+    emit outputDeviceChanged();
 }
 
 QVariantList PlayerController::lyrics() const

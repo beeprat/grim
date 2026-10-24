@@ -250,6 +250,7 @@ qt_add_qml_module(MusicPlayer
         qml/icons/stop.svg
         qml/icons/soulseek.svg
         qml/icons/statistics.svg
+        qml/icons/speaker.svg
         qml/icons/volume.svg
         qml/icons/volume_off.svg
 )

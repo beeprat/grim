@@ -80,6 +80,8 @@ ma_node_vtable kEffectsVtable{EffectsNode::process, nullptr, 1, 1, 0};
 
 struct AudioEngine::Impl
 {
+    ma_context context{};
+    bool contextReady = false;
     ma_engine engine{};
     bool engineReady = false;
     // Two slots so a crossfade can play the old track while the new one starts:
@@ -91,10 +93,15 @@ struct AudioEngine::Impl
     EffectsNode effects;
     bool effectsReady = false;
     float speed = 1;
+    float volume = 1;
 
     Slot &active() { return slots[current]; }
     const Slot &active() const { return slots[current]; }
     Slot &outgoing() { return slots[1 - current]; }
+
+    // Opens the output (nullptr = system default) with the effects node; stop() undoes it.
+    void start(ma_device_id *device);
+    void stop();
 
     ma_uint32 sampleRate() const
     {
@@ -149,37 +156,91 @@ struct AudioEngine::Impl
 AudioEngine::AudioEngine()
     : m_impl(std::make_unique<Impl>())
 {
-    const ma_result result = ma_engine_init(nullptr, &m_impl->engine);
+    // Own context so devices can be listed and the engine reopened on another one.
+    m_impl->contextReady = ma_context_init(nullptr, 0, nullptr, &m_impl->context) == MA_SUCCESS;
+    m_impl->start(nullptr);
+}
+
+void AudioEngine::Impl::start(ma_device_id *device)
+{
+    ma_engine_config engineConfig = ma_engine_config_init();
+    engineConfig.pContext = contextReady ? &context : nullptr;
+    engineConfig.pPlaybackDeviceID = device;
+    const ma_result result = ma_engine_init(&engineConfig, &engine);
     if (result != MA_SUCCESS) {
         std::fprintf(stderr, "AudioEngine: cannot open output device: %s\n", ma_result_description(result));
         return;
     }
-    m_impl->engineReady = true;
+    engineReady = true;
+    ma_engine_set_volume(&engine, volume);
 
     // Effects node: allocate everything now, the mixing thread must not.
-    EffectsNode &effects = m_impl->effects;
-    effects.channels = ma_engine_get_channels(&m_impl->engine);
-    const ma_uint32 rate = ma_engine_get_sample_rate(&m_impl->engine);
+    effects.channels = ma_engine_get_channels(&engine);
+    const ma_uint32 rate = ma_engine_get_sample_rate(&engine);
     effects.reverb.prepare(rate);
     ma_node_config config = ma_node_config_init();
     config.vtable = &kEffectsVtable;
     config.pInputChannels = &effects.channels;
     config.pOutputChannels = &effects.channels;
-    if (ma_node_init(ma_engine_get_node_graph(&m_impl->engine), &config, nullptr, &effects.base) == MA_SUCCESS) {
-        ma_node_attach_output_bus(&effects.base, 0, ma_engine_get_endpoint(&m_impl->engine), 0);
-        m_impl->effectsReady = true;
+    if (ma_node_init(ma_engine_get_node_graph(&engine), &config, nullptr, &effects.base) == MA_SUCCESS) {
+        ma_node_attach_output_bus(&effects.base, 0, ma_engine_get_endpoint(&engine), 0);
+        effectsReady = true;
     } else {
         std::fprintf(stderr, "AudioEngine: effects unavailable\n");
     }
 }
 
+void AudioEngine::Impl::stop()
+{
+    slots[0].unload();
+    slots[1].unload();
+    queued = false;
+    if (effectsReady)
+        ma_node_uninit(&effects.base, nullptr);
+    effectsReady = false;
+    if (engineReady)
+        ma_engine_uninit(&engine);
+    engineReady = false;
+}
+
 AudioEngine::~AudioEngine()
 {
-    unload();
-    if (m_impl->effectsReady)
-        ma_node_uninit(&m_impl->effects.base, nullptr);
-    if (m_impl->engineReady)
-        ma_engine_uninit(&m_impl->engine);
+    m_impl->stop();
+    if (m_impl->contextReady)
+        ma_context_uninit(&m_impl->context);
+}
+
+std::vector<std::string> AudioEngine::outputDevices() const
+{
+    std::vector<std::string> names;
+    ma_device_info *devices = nullptr;
+    ma_uint32 count = 0;
+    if (m_impl->contextReady
+        && ma_context_get_devices(&m_impl->context, &devices, &count, nullptr, nullptr) == MA_SUCCESS) {
+        for (ma_uint32 i = 0; i < count; ++i)
+            names.emplace_back(devices[i].name);
+    }
+    return names;
+}
+
+void AudioEngine::setOutputDevice(const std::string &name)
+{
+    // Copy the id before stopping: the device list belongs to the context.
+    ma_device_id id{};
+    bool found = false;
+    ma_device_info *devices = nullptr;
+    ma_uint32 count = 0;
+    if (!name.empty() && m_impl->contextReady
+        && ma_context_get_devices(&m_impl->context, &devices, &count, nullptr, nullptr) == MA_SUCCESS) {
+        for (ma_uint32 i = 0; i < count && !found; ++i) {
+            if (name == devices[i].name) {
+                id = devices[i].id;
+                found = true;
+            }
+        }
+    }
+    m_impl->stop();
+    m_impl->start(found ? &id : nullptr);
 }
 
 bool AudioEngine::isReady() const
@@ -355,8 +416,9 @@ std::int64_t AudioEngine::durationMs() const
 
 void AudioEngine::setVolume(float volume)
 {
+    m_impl->volume = std::clamp(volume, 0.0f, 1.0f);
     if (m_impl->engineReady)
-        ma_engine_set_volume(&m_impl->engine, std::clamp(volume, 0.0f, 1.0f));
+        ma_engine_set_volume(&m_impl->engine, m_impl->volume);
 }
 
 void AudioEngine::setTrackGain(float gain)

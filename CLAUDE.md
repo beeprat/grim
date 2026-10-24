@@ -106,6 +106,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   two `ma_sound` slots (current, fading/queued). Only `AudioEngine.cpp` includes `miniaudio.h`.
 - Decoders: WAV/FLAC/MP3 via miniaudio; M4A/AAC via `AacSource` = `MfAudioSource` (Media Foundation) on Windows,
   `FfmpegAudioSource` on Linux. Decoding runs on the mixing thread (documented shortcut).
+- Output device: rail button above Settings (`player/outputDevice`, name; empty or missing = system default). Switching reopens the `ma_engine` on its own `ma_context` and reloads the track at its position. `play()` restarts a device Windows stopped while idle.
 - Engine volume = user slider; per-sound volume is the song's own dB value (right-click → "Volume adjustment…",
   dialog in `Main.qml`, ±20 dB, `core/ReplayGain::fromDb`), 1 without one. ReplayGain tags are not applied (removed
   on request); the dialog only shows the tag as a hint. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
