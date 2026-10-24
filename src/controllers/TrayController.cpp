@@ -69,7 +69,15 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     connect(&m_player, &PlayerController::playingChanged, this, &TrayController::updateNowPlaying);
     connect(&m_settings, &SettingsController::translationApplied, this, &TrayController::updateNowPlaying);
     updateNowPlaying();
-    m_menu.addAction(tr("Quit"), qApp, &QCoreApplication::quit);
+    // Centered like the title above.
+    auto *quit = new QToolButton;
+    quit->setAutoRaise(true);
+    quit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    quit->setText(tr("Quit"));
+    connect(quit, &QToolButton::clicked, qApp, &QCoreApplication::quit);
+    auto *quitAction = new QWidgetAction(&m_menu);
+    quitAction->setDefaultWidget(quit);
+    m_menu.addAction(quitAction);
     m_menu.setFixedWidth(kMenuWidth);
     m_tray->setContextMenu(&m_menu);
 
