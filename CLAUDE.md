@@ -112,7 +112,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Effects: only in the popup by the volume, and applied only while Settings → Effects → "Show effects button" is
   on (`Effects.showInNowPlaying`). Speed (0.5–1.5, pitch follows) = `ma_sound_set_pitch`; Reverb (Freeverb) in a custom
   `EffectsNode`, which also does Mono (Settings → Playback, `player/mono`: both channels = their average, after the
-  reverb). Speed slider: marks at 80 % / 120 %, snaps within 1.5 %. Gapless timing and Discord timestamps divide by the speed. Speed is stored under the old
+  reverb). Speed slider: marks at 80 % / 120 %, snaps within 1.5 % while dragging; effect sliders
+  step once per wheel notch. Gapless timing and Discord timestamps divide by the speed. Speed is stored under the old
   `effects/slowed`, `effects/slowedSpeed` keys. Pitch shift (SoundTouch) was removed on request.
 - `PlayerController` polls every 200 ms (15 ms while an A-B loop is set); `positionChanged` fires once per second.
 - Crossfade: only automatic track changes (not manual next/prev, repeat one, or tracks shorter than two fades).
@@ -139,7 +140,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Download import (`SlskdController::importToLibrary`, `core/DownloadTagger`): the title loses edition notes
   ("(Remastered 2009)", "[Deluxe Edition]", " - 2015 Remaster", "(50th Anniversary)": anniversary editions join the
   original album), and a leading track number leaves the file name (`cleanFileName`: only the tag's number or a
-  zero-padded one, so "99 Problems" stays). If the library already has the album (same album and
+  zero-padded one, so "99 Problems" stays). `albumKey` also drops release extras ("(Super Deluxe Edition)",
+  "- Bonus Track Version", or such words trailing unbracketed) so those join the original album. If the library already has the album (same album and
   artist after `albumKey`/`artistKey`: case, "The ", punctuation and edition notes ignored), the file gets the folder
   most of those tracks are in, their most common artist / album name / year, and their most common cover, then moves
   there (`LibraryFiles::moveIntoFolder`); otherwise it goes in by its download folder as before. Library tracks come

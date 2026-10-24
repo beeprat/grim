@@ -122,6 +122,34 @@ private slots:
         QCOMPARE(DownloadTagger::cleanTitle(u"Something (2019 Mix) [50th Anniversary]"_s), u"Something (2019 Mix)"_s);
     }
 
+    void albumKeyIgnoresReleaseExtras_data()
+    {
+        QTest::addColumn<QString>("album");
+        QTest::newRow("plain") << u"Abbey Road"_s;
+        QTest::newRow("super deluxe bracket") << u"Abbey Road (Super Deluxe Edition)"_s;
+        QTest::newRow("anniversary square") << u"Abbey Road [50th Anniversary Super Deluxe]"_s;
+        QTest::newRow("expanded") << u"Abbey Road (Expanded)"_s;
+        QTest::newRow("bonus track version dash") << u"Abbey Road - Bonus Track Version"_s;
+        QTest::newRow("trailing words") << u"Abbey Road Super Deluxe Edition"_s;
+        QTest::newRow("trailing year + remaster") << u"Abbey Road 2019 Remaster"_s;
+        QTest::newRow("colon") << u"Abbey Road: Special Edition"_s;
+    }
+
+    void albumKeyIgnoresReleaseExtras()
+    {
+        QFETCH(QString, album);
+        QCOMPARE(DownloadTagger::albumKey(album), u"abbey road"_s);
+    }
+
+    void albumKeyKeepsRealNames()
+    {
+        QCOMPARE(DownloadTagger::albumKey(u"1999"_s), u"1999"_s);
+        QCOMPARE(DownloadTagger::albumKey(u"Blink-182"_s), u"blink 182"_s);       // a number alone stays
+        QCOMPARE(DownloadTagger::albumKey(u"Deluxe"_s), u"deluxe"_s);            // the whole name
+        QCOMPARE(DownloadTagger::albumKey(u"Help! (Live)"_s), u"help live"_s);
+        QVERIFY(DownloadTagger::albumKey(u"Let It Be... Naked"_s) != DownloadTagger::albumKey(u"Let It Be"_s));
+    }
+
     void findsTheFolderMostOfTheAlbumIsIn()
     {
         const QList<Track> library = {

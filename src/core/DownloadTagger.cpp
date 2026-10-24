@@ -73,7 +73,27 @@ QString cleanTitle(const QString &title)
 
 QString albumKey(const QString &album)
 {
-    return simplified(album);
+    // Release extras that are not part of the album's name: "(Super Deluxe Edition)", "[Expanded]",
+    // "- Bonus Track Version", or the same words trailing without brackets ("Abbey Road Super Deluxe").
+    static const QString extra =
+        u"(?:remaster(?:ed)?|deluxe|anniversary|expanded|edition|version|bonus|reissue|collector'?s?|legacy|"
+        "special|super|mono|stereo)"_s;
+    static const QRegularExpression bracket(u"\\s*[\\(\\[][^\\)\\]]*\\b"_s + extra + u"\\b[^\\)\\]]*[\\)\\]]"_s,
+                                            QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression dash(u"\\s+[-–—:]\\s+[^-–—:]*\\b"_s + extra + u"\\b[^-–—:]*$"_s,
+                                         QRegularExpression::CaseInsensitiveOption);
+    // After simplified(): lower case, words only. Numbers ("50th", "2019") go only along with such a word.
+    static const QRegularExpression trailing(u"(?:\\s+(?:\\d+(?:st|nd|rd|th)?|"_s + extra + u"|tracks?|cd|lp))+$"_s);
+    static const QRegularExpression extraWord(u"\\b"_s + extra + u"\\b"_s);
+
+    QString name = album;
+    name.remove(bracket);
+    name.remove(dash);
+    QString key = simplified(name.trimmed().isEmpty() ? album : name);
+    const QRegularExpressionMatch tail = trailing.match(key);
+    if (tail.hasMatch() && tail.capturedStart() > 0 && tail.captured().contains(extraWord))
+        key.truncate(tail.capturedStart());
+    return key;
 }
 
 QString artistKey(const QString &artist)

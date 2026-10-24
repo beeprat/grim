@@ -46,10 +46,13 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.maximumWidth: 260
             enabled: effectSwitch.checked
+            // One wheel notch = one step (1 % speed, 5 % reverb).
+            wheelEnabled: true
             onMoved: {
                 let v = value
+                // Snap only while dragging: the wheel must be able to step off a mark.
                 for (const mark of effect.marks) {
-                    if (Math.abs(v - mark) <= effect.snapRange)
+                    if (pressed && Math.abs(v - mark) <= effect.snapRange)
                         v = mark
                 }
                 effect.moved(v)
