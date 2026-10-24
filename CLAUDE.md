@@ -32,7 +32,7 @@ Fusion/Imagine/Universal/FluentWinUI3/Windows (dirs + DLLs; keep Material and Ba
 app-locally (`msvcp140*.dll`, `vcruntime140*.dll` from `VC/Redist/MSVC/<ver>/x64/Microsoft.VC143.CRT`).
 Pack `7z a -t7z -mx=9 -md=64m -ms=on GRIM-win64.7z GRIM`; check `dumpbin /dependents` and run with only System32 on
 PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Programs\grim`) -> `dist/grim-setup.exe`.
-`installer/grim.iss` is the older Inno version. Bump the version in `CMakeLists.txt`, `grim.nsi` and `grim.iss`.
+`installer/grim.iss` is the older Inno version. CI (`.github/workflows/windows.yml`, windows-2022) does all of this on every push and attaches the 7z and installer to `v*` tag releases. Bump the version in `CMakeLists.txt`, `grim.nsi` and `grim.iss`.
 
 ## Project structure
 
