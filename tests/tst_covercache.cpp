@@ -119,6 +119,25 @@ private slots:
         QVERIFY(qBlue(updated.pixel(10, 10)) > 200);
     }
 
+    void albumSharesOneThumbnail()
+    {
+        QTemporaryDir dir;
+        const QString cacheDir = dir.filePath(u"cache"_s);
+        const QString first = dir.filePath(u"1.wav"_s);
+        const QString second = dir.filePath(u"2.wav"_s);
+        QVERIFY(writeSilentWav(first));
+        QVERIFY(writeSilentWav(second));
+        QVERIFY(embedCover(first, Qt::red));
+        QVERIFY(embedCover(second, Qt::red));
+
+        CoverCache cache(cacheDir);
+        QVERIFY(!cache.load(first, QSize(64, 64)).isNull());
+        QVERIFY(!cache.load(second, QSize(64, 64)).isNull());
+        QCOMPARE(fileCount(cacheDir), 1);
+        // A fresh cache finds both through refs/ without decoding again.
+        QVERIFY(qRed(CoverCache(cacheDir).load(second, QSize(64, 64)).pixel(10, 10)) > 200);
+    }
+
     void remembersMissingCover()
     {
         QTemporaryDir dir;

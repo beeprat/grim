@@ -656,13 +656,47 @@ ApplicationWindow {
         }
 
         MultiEffect {
+            id: wallpaperEffect
+
             anchors.fill: parent
             source: wallpaper
-            visible: Theme.backgroundImage !== "" && wallpaper.status === Image.Ready
+            visible: false // drawn by the frozen copy below
             blurEnabled: Theme.backgroundBlur > 0
             blur: Theme.backgroundBlur
             blurMax: 64
             brightness: -0.25
+        }
+
+        // The blur is computed once into a texture instead of on every frame the window redraws;
+        // redone shortly after the image, blur, fill or window size changes.
+        ShaderEffectSource {
+            anchors.fill: parent
+            sourceItem: wallpaperEffect
+            visible: Theme.backgroundImage !== "" && wallpaper.status === Image.Ready
+            live: false
+            hideSource: true
+
+            Timer {
+                id: wallpaperRefresh
+
+                interval: 100
+                onTriggered: parent.scheduleUpdate()
+            }
+
+            Connections {
+                target: wallpaperEffect
+                function onWidthChanged() { wallpaperRefresh.restart() }
+                function onHeightChanged() { wallpaperRefresh.restart() }
+                function onBlurChanged() { wallpaperRefresh.restart() }
+                function onBlurEnabledChanged() { wallpaperRefresh.restart() }
+            }
+
+            Connections {
+                target: wallpaper
+                function onStatusChanged() { wallpaperRefresh.restart() }
+                function onFillModeChanged() { wallpaperRefresh.restart() }
+                function onSourceChanged() { wallpaperRefresh.restart() }
+            }
         }
     }
 

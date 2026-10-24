@@ -91,7 +91,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   (`replaygain_db`, NULL = none; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
   the built-in Favorites list. Older builds refuse a newer schema (no ratings shown) rather than downgrade it.
 - `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
-- `cache/covers` (`core/CoverCache`, key path + mtime + size, `.none` = no cover), `cache/artists` (Deezer photos),
+- `cache/covers` (`core/CoverCache`: one JPEG (q80) per cover picture + size, `refs/<sha1 of path+mtime+size>` names the picture; `.none` = no cover; a folder without `refs/` has old per-track thumbnails, deleted on start), `cache/artists` (Deezer photos),
   `cache/lyrics` (LRCLIB; `.none` retried after 7 days). Network failures are never cached. Safe to delete.
 - Key files (`core/KeyFile`, `key = value`, `#` comments): `lastfm.txt` (`api_key`, `shared_secret`), `discord.txt`
   (`application_id`, `imgur_client_id`; empty values fall back to `kDefaultApplicationId`/`kDefaultImgurClientId`).

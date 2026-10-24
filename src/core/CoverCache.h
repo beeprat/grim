@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QCache>
+#include <QHash>
 #include <QImage>
 #include <QMutex>
 #include <QSize>
@@ -8,9 +9,10 @@
 
 // Album art scaled to display size, cached in memory and as JPEG thumbnails on
 // disk, so scrolling the library does not re-read tags and decode full-size
-// covers. Entries are keyed by file path, modification time and size, so a
-// retagged file gets a fresh thumbnail. Thread-safe (called from Qt Quick's
-// image loader threads).
+// covers. Thumbnails are stored once per cover picture and size (the tracks of an
+// album share one); each track (path, modification time, size) points to its
+// picture through a small file in "refs/", so a retagged file gets a fresh
+// thumbnail. Thread-safe (called from Qt Quick's image loader threads).
 class CoverCache
 {
 public:
@@ -25,11 +27,15 @@ public:
     QString thumbnailFile(const QString &audioPath, const QSize &size);
 
 private:
-    QImage decode(const QString &audioPath, const QSize &size) const;
+    static QImage decode(QByteArray bytes, const QSize &size);
     static QString keyFor(const QString &audioPath, const QSize &size);
+    static QString hashOf(const QByteArray &data);
     QString diskFile(const QString &key, const QString &extension) const;
+    // Picture key (hash of the cover bytes and size) of a track key; empty if not known yet.
+    QString pictureKey(const QString &trackKey);
 
     QString m_directory;
     QMutex m_mutex;
-    QCache<QString, QImage> m_memory; // cost = bytes; null images (no cover) cost 1
+    QCache<QString, QImage> m_memory;  // by picture key; cost = bytes
+    QHash<QString, QString> m_pictures; // track key -> picture key, mirrors refs/
 };

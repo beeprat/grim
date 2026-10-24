@@ -11,19 +11,31 @@
 
 using namespace Qt::StringLiterals;
 
+namespace {
+
+const auto kRefsFolder = u"refs"_s;
+// Thumbnails are small; 80 looks the same as 90 there and takes about a third less space.
+constexpr int kJpegQuality = 80;
+
+} // namespace
+
 CoverCache::CoverCache(const QString &diskDirectory, qint64 memoryBytes)
     : m_directory(diskDirectory)
 {
     m_memory.setMaxCost(memoryBytes);
-    if (!m_directory.isEmpty())
-        QDir().mkpath(m_directory);
+    if (m_directory.isEmpty())
+        return;
+    QDir dir(m_directory);
+    // Older builds kept one thumbnail per track; no "refs" folder means those are still here.
+    if (dir.exists() && !dir.exists(kRefsFolder)) {
+        for (const QString &old : dir.entryList({u"*.jpg"_s}, QDir::Files))
+            dir.remove(old);
+    }
+    dir.mkpath(kRefsFolder);
 }
 
-QImage CoverCache::decode(const QString &audioPath, const QSize &size) const
+QImage CoverCache::decode(QByteArray bytes, const QSize &size)
 {
-    QByteArray bytes = TagReader::readCover(audioPath);
-    if (bytes.isEmpty())
-        return {};
     QBuffer buffer(&bytes);
     QImageReader reader(&buffer);
     const QSize original = reader.size();
@@ -43,52 +55,107 @@ QString CoverCache::keyFor(const QString &audioPath, const QSize &size)
         .arg(size.height());
 }
 
-// Disk: "<hash>.jpg" holds the thumbnail; an empty "<hash>.none" remembers "no cover".
+QString CoverCache::hashOf(const QByteArray &data)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha1).toHex());
+}
+
+// Disk: "<hash>.jpg" holds a thumbnail (hash of the picture key); an empty "<hash>.none" remembers that a
+// track has no cover; "refs/<hash>" (hash of the track key) holds the track's picture key.
 QString CoverCache::diskFile(const QString &key, const QString &extension) const
 {
     if (m_directory.isEmpty())
         return {};
-    const QString hash = QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex());
-    return QDir(m_directory).filePath(hash + extension);
+    return QDir(m_directory).filePath(hashOf(key.toUtf8()) + extension);
+}
+
+QString CoverCache::pictureKey(const QString &trackKey)
+{
+    {
+        const QMutexLocker lock(&m_mutex);
+        if (const auto it = m_pictures.constFind(trackKey); it != m_pictures.cend())
+            return *it;
+    }
+    if (m_directory.isEmpty())
+        return {};
+    QFile ref(QDir(m_directory).filePath(kRefsFolder + u'/' + hashOf(trackKey.toUtf8())));
+    if (!ref.open(QIODevice::ReadOnly))
+        return {};
+    const QString key = QString::fromUtf8(ref.readAll());
+    const QMutexLocker lock(&m_mutex);
+    m_pictures.insert(trackKey, key);
+    return key;
 }
 
 QString CoverCache::thumbnailFile(const QString &audioPath, const QSize &size)
 {
     if (!size.isValid() || load(audioPath, size).isNull())
         return {};
-    const QString thumbnail = diskFile(keyFor(audioPath, size), u".jpg"_s);
+    const QString thumbnail = diskFile(pictureKey(keyFor(audioPath, size)), u".jpg"_s);
     return QFileInfo::exists(thumbnail) ? thumbnail : QString();
 }
 
 QImage CoverCache::load(const QString &audioPath, const QSize &size)
 {
-    const QString key = keyFor(audioPath, size);
-    {
-        const QMutexLocker lock(&m_mutex);
-        if (const QImage *cached = m_memory.object(key))
-            return *cached;
+    const QString trackKey = keyFor(audioPath, size);
+    QString picture = pictureKey(trackKey);
+    if (!picture.isEmpty()) {
+        {
+            const QMutexLocker lock(&m_mutex);
+            if (const QImage *cached = m_memory.object(picture))
+                return *cached;
+        }
+        QImage image(diskFile(picture, u".jpg"_s));
+        if (!image.isNull()) {
+            const QMutexLocker lock(&m_mutex);
+            m_memory.insert(picture, new QImage(image), std::max<qint64>(1, image.sizeInBytes()));
+            return image;
+        }
+        // Thumbnail deleted (cache cleared): read the file again below.
     }
 
-    const QString thumbnail = diskFile(key, u".jpg"_s);
-    const QString noCover = diskFile(key, u".none"_s);
+    const QString noCover = diskFile(trackKey, u".none"_s);
+    if (!noCover.isEmpty() && QFileInfo::exists(noCover))
+        return {};
 
-    QImage image;
-    if (!thumbnail.isEmpty() && QFileInfo::exists(thumbnail)) {
-        image.load(thumbnail);
-    } else if (noCover.isEmpty() || !QFileInfo::exists(noCover)) {
-        image = decode(audioPath, size);
-        if (!m_directory.isEmpty()) {
-            if (image.isNull()) {
-                QFile marker(noCover);
-                if (!marker.open(QIODevice::WriteOnly))
-                    qWarning().noquote() << "CoverCache: cannot write" << noCover;
-            }
-            else if (size.isValid()) // only thumbnails are worth storing; full images are the file's own
-                image.save(thumbnail, "JPG", 90);
+    const QByteArray bytes = TagReader::readCover(audioPath);
+    if (bytes.isEmpty()) {
+        if (!noCover.isEmpty()) {
+            QFile marker(noCover);
+            if (!marker.open(QIODevice::WriteOnly))
+                qWarning().noquote() << "CoverCache: cannot write" << noCover;
         }
+        return {};
+    }
+
+    picture = u"%1|%2x%3"_s.arg(hashOf(bytes)).arg(size.width()).arg(size.height());
+    {
+        const QMutexLocker lock(&m_mutex);
+        m_pictures.insert(trackKey, picture);
+    }
+    QImage image;
+    {
+        const QMutexLocker lock(&m_mutex);
+        if (const QImage *cached = m_memory.object(picture))
+            image = *cached;
+    }
+    const QString thumbnail = diskFile(picture, u".jpg"_s);
+    if (image.isNull() && !thumbnail.isEmpty())
+        image.load(thumbnail); // another track of the album made it already
+    if (image.isNull()) {
+        image = decode(bytes, size);
+        if (image.isNull())
+            return {};
+        if (!thumbnail.isEmpty() && size.isValid()) // only thumbnails are worth storing; full images are the file's own
+            image.save(thumbnail, "JPG", kJpegQuality);
+    }
+    if (!m_directory.isEmpty() && size.isValid()) {
+        QFile ref(QDir(m_directory).filePath(kRefsFolder + u'/' + hashOf(trackKey.toUtf8())));
+        if (ref.open(QIODevice::WriteOnly))
+            ref.write(picture.toUtf8());
     }
 
     const QMutexLocker lock(&m_mutex);
-    m_memory.insert(key, new QImage(image), std::max<qint64>(1, image.sizeInBytes()));
+    m_memory.insert(picture, new QImage(image), std::max<qint64>(1, image.sizeInBytes()));
     return image;
 }
