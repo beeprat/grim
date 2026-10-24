@@ -35,7 +35,7 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 - listening time i play count (play se računa nakon 30 sekundi)
 - top trake, izvođači i albumi, sa slikama izvođača sa Deezer-a.
 
-*soulseek preuzimanje:* (ophodno, **potreban slskd**)
+*soulseek preuzimanje:* (ophodno, samo Soulseek nalog: grim. sam preuzima i pokreće slskd)
 - pretraga po albumu, izvođaču ili traci, filtriranje po formatu i bitrate.
 - preuzimanja idu direktno u library, konvertovanje u M4A, MP3 ili FLAC, ili original.
 
@@ -53,7 +53,7 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 ## requirements
 
 - windows 10 ili 11, 64-bit
-- ophodno: [slskd](https://github.com/slskd/slskd) za Soulseek preuzimanja.
+- ophodno: Soulseek nalog (grim. sam preuzima [slskd](https://github.com/slskd/slskd)).
 - ophodno: [ffmpeg](https://ffmpeg.org) na PATH za konvertovanje. (nije potrebno kad je "Save as original")
 
 ## instalacija
@@ -67,10 +67,8 @@ brisanje aplikacije ne briše ove podatke.
 
 ## podešavanje slskd
 
-**Soulseek:** u podešavanjima → Soulseek uključiti "Run slskd for me" i upisati Soulseek korisničko ime i lozinku. grim. sam preuzima [slskd](https://github.com/slskd/slskd) (oko 55 MB, AGPL-3.0) i pokreće ga samo dok je grim. otvoren. za brža preuzimanja otvoriti TCP port 50300 na ruteru.
+**Soulseek:** u podešavanjima → Soulseek upisati Soulseek korisničko ime i lozinku. grim. sam preuzima [slskd](https://github.com/slskd/slskd) (oko 55 MB, AGPL-3.0) i pokreće ga samo dok je grim. otvoren. za brža preuzimanja otvoriti TCP port 50300 na ruteru.
 
-**svoj slskd:** isključiti "Run slskd for me", pa upisati adresu (podrazumevana: `http://localhost:5030`) i API key.
-ako slskd radi sa `--no-auth`, takođe ga započeti sa `--http-ip-address 127.0.0.1` da bi ga samo tvoj računar pristupio.
 statusna tačka u title baru pokazuje da li je slskd dostupan.
 
 ## privatnost

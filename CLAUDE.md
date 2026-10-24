@@ -97,7 +97,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - `scrobble-queue.json`, `imgur-covers.json`, `translations/<Language>.txt` (`"English" = "Translated";`).
 - QSettings: `player/volume|shuffle|repeat` and `player/last*` (queue, track, position) saved on quit and on
   `QGuiApplication::commitDataRequest` (Windows shutdown/logoff may kill the process before destructors run);
-  `slskd/serverUrl|apiKey` (plain text), `slskd/managed|username|managedApiKey`, `slskd/downloadFormat`, `playback/crossfadeSeconds`, `library/*`,
+  `slskd/username|managedApiKey`, `slskd/downloadFormat`, `playback/crossfadeSeconds`, `library/*`,
   `layout/grid`. QML-side settings use QtCore `Settings` categories (`theme`, `effects`, `library`, `nowPlaying`).
 
 ## Audio
@@ -128,7 +128,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   user's own slskd folder; `APP_DIR` env is ignored) and settings as `SLSKD_*` env vars: 127.0.0.1:5031, no HTTPS,
   auth on with a random key (`slskd/managedApiKey`, cidr 127.0.0.1/32). Dies with grim. (job object / PDEATHSIG);
   unexpected exits retried 3 times. Login: `slskd/username`, password via `core/CredentialStore` (Credential Manager
-  `grimPlayer/slskd-password`; Linux 0600 file). Off (`slskd/managed` false, the default) = the user's own slskd.
+  `grimPlayer/slskd-password`; Linux 0600 file). Settings → Soulseek is only that login; nothing runs until a
+  username is set. Connecting to a slskd the user runs themselves was removed on request.
 - slskd (`core/SlskdClient`, API v0, `X-API-Key`, endpoints follow llehouerou/waves `client.go`): callbacks only on
   success, every failure once via `errorOccurred`. Status (`GET application`) is checked only at startup, after a
   failure and on click; no background polling. The API reports no local paths: find downloads by name under

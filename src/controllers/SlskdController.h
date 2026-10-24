@@ -26,15 +26,12 @@ class SlskdController : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
-    // "Run slskd for me": grim. downloads and runs its own slskd (SlskdRunner) and logs it in as `username`.
-    // Off: the user's own slskd at serverUrl/apiKey.
+    // grim. downloads and runs its own slskd (SlskdRunner), logged in as `username`; `managed` once a login is set.
     Q_PROPERTY(bool managed READ managed NOTIFY settingsChanged FINAL)
     Q_PROPERTY(QString username READ username NOTIFY settingsChanged FINAL)
     Q_PROPERTY(QString managedStatus READ managedStatus NOTIFY managedStatusChanged FINAL)
     Q_PROPERTY(bool managedBusy READ managedBusy NOTIFY managedStatusChanged FINAL) // downloading slskd
     Q_PROPERTY(bool managedFailed READ managedFailed NOTIFY managedStatusChanged FINAL)
-    Q_PROPERTY(QString serverUrl READ serverUrl NOTIFY settingsChanged FINAL)
-    Q_PROPERTY(QString apiKey READ apiKey NOTIFY settingsChanged FINAL)
     // What finished downloads become: "original" (moved as downloaded, no ffmpeg needed) or an
     // AudioConverter format ("m4a", "mp3", "flac"). Default "m4a".
     Q_PROPERTY(QString downloadFormat READ downloadFormat WRITE setDownloadFormat NOTIFY downloadFormatChanged FINAL)
@@ -66,8 +63,6 @@ public:
     QString managedStatus() const;
     bool managedBusy() const;
     bool managedFailed() const;
-    QString serverUrl() const;
-    QString apiKey() const;
     QString downloadFormat() const;
     void setDownloadFormat(const QString &format);
     Status status() const;
@@ -78,13 +73,9 @@ public:
     SearchGroupsModel *groups() const;
     DownloadsModel *downloads() const;
 
-    // Saves to QSettings. The key is optional and stored in plain text in the user's registry.
-    Q_INVOKABLE void saveSettings(const QString &serverUrl, const QString &apiKey);
-    // Switches to grim.'s own slskd: stores the login (the password in the system's credential store),
-    // downloads slskd if needed and starts it. An empty password keeps the stored one.
+    // Stores the Soulseek login (the password in the system's credential store), downloads slskd if needed
+    // and (re)starts it. An empty password keeps the stored one.
     Q_INVOKABLE void useManaged(const QString &username, const QString &password);
-    // Back to the user's own slskd; grim.'s copy stops.
-    Q_INVOKABLE void useOwn();
     // Starts grim.'s slskd again after it failed (or retries the download).
     Q_INVOKABLE void restartManaged();
     Q_INVOKABLE void checkStatus();
@@ -114,7 +105,7 @@ private:
     void finishSearch();
     void setErrorText(const QString &text);
     void setStatus(Status status);
-    // Points the client at grim.'s slskd or the user's, and starts or stops grim.'s copy to match.
+    // Starts grim.'s slskd (downloading it first if needed) once a login is set.
     void applyServer();
     // Polls the status every kStatusPollMs up to `checks` times (slskd may still be starting).
     void pollStatus(int checks);
@@ -134,7 +125,6 @@ private:
     QTimer *m_statusTimer;
     int m_statusChecksLeft = 0;
     SlskdRunner *m_runner;
-    bool m_managed = false;
     QString m_username;
     QString m_managedApiKey; // random, accepted only from 127.0.0.1
     AudioConverter *m_converter;
@@ -145,8 +135,6 @@ private:
     QHash<QString, QString> m_conversions;  // source path -> download id
 
     QString m_downloadFormat;
-    QString m_serverUrl;
-    QString m_apiKey;
     QString m_searchId; // current search; replies for older searches are dropped
     bool m_searching = false;
     int m_responseCount = 0;

@@ -257,9 +257,8 @@ Rectangle {
             readonly property string statusText: {
                 switch (SlskdController.status) {
                 case SlskdController.Checking: return qsTr("Checking slskd…")
-                case SlskdController.Offline: return SlskdController.managed ? SlskdController.managedStatus
-                                                     : qsTr("slskd is not running at %1").arg(SlskdController.serverUrl)
-                case SlskdController.AuthRequired: return qsTr("slskd needs an API key (Soulseek › Settings), or start it with --no-auth")
+                case SlskdController.Offline: return SlskdController.managedStatus
+                case SlskdController.AuthRequired: return qsTr("slskd did not accept grim.'s API key")
                 case SlskdController.NotLoggedIn: return qsTr("slskd is running but not logged in to Soulseek")
                 case SlskdController.Online: return qsTr("slskd is connected to Soulseek")
                 }

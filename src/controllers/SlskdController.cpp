@@ -19,17 +19,13 @@ namespace {
 constexpr int kSearchPollMs = 1000;
 constexpr int kDownloadsPollMs = 1500;
 // Status is checked only while the app starts (slskd may still be launching), then on demand:
-// no background polling. kStartupChecks tries, kStatusPollMs apart; grim.'s own slskd gets longer (it
-// starts with grim., and a first run sets up its database).
+// no background polling. kManagedStartupChecks tries, kStatusPollMs apart (slskd starts with grim., and a
+// first run sets up its database).
 constexpr int kStatusPollMs = 2000;
-constexpr int kStartupChecks = 5;
 constexpr int kManagedStartupChecks = 20;
 
-const auto kServerUrlKey = "slskd/serverUrl"_L1;
 const auto kDownloadFormatKey = "slskd/downloadFormat"_L1;
 const auto kOriginalFormat = "original"_L1;
-const auto kApiKeyKey = "slskd/apiKey"_L1;
-const auto kManagedKey = "slskd/managed"_L1;
 const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
 const auto kPasswordName = "slskd-password"_L1; // CredentialStore
@@ -53,13 +49,9 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     s_instance = this;
 
     const QSettings stored;
-    m_serverUrl = stored.value(kServerUrlKey, u"http://localhost:5030"_s).toString();
-    // shortcut: API key in plain QSettings (HKCU registry); move to Windows Credential Manager if shared PCs matter.
-    m_apiKey = stored.value(kApiKeyKey).toString();
     m_downloadFormat = stored.value(kDownloadFormatKey, u"m4a"_s).toString();
     if (m_downloadFormat != kOriginalFormat && !AudioConverter::formats().contains(m_downloadFormat))
         m_downloadFormat = u"m4a"_s;
-    m_managed = stored.value(kManagedKey, false).toBool();
     m_username = stored.value(kUsernameKey).toString();
     // Only grim. and only this PC use it (slskd accepts it from 127.0.0.1 only), so plain QSettings is fine.
     m_managedApiKey = stored.value(kManagedApiKeyKey).toString();
@@ -73,7 +65,7 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     connect(m_runner, &SlskdRunner::stateChanged, this, [this, previous = m_runner->state()]() mutable {
         const SlskdRunner::State state = m_runner->state();
         // Just downloaded: start it. Just started: slskd answers within seconds, so look for it.
-        if (m_managed && previous == SlskdRunner::Downloading && state == SlskdRunner::Stopped)
+        if (managed() && previous == SlskdRunner::Downloading && state == SlskdRunner::Stopped)
             applyServer();
         else if (previous != SlskdRunner::Running && state == SlskdRunner::Running)
             pollStatus(kManagedStartupChecks);
@@ -135,26 +127,22 @@ void SlskdController::pollStatus(int checks)
 
 void SlskdController::applyServer()
 {
-    if (!m_managed) {
-        m_runner->stop();
-        m_client->setServer(QUrl(m_serverUrl), m_apiKey);
-        pollStatus(kStartupChecks);
-        return;
-    }
     m_client->setServer(QUrl(m_runner->serverUrl()), m_managedApiKey);
     switch (m_runner->state()) {
     case SlskdRunner::NotInstalled:
-        m_runner->install(); // starts it once downloaded (stateChanged)
+        if (managed())
+            m_runner->install(); // starts it once downloaded (stateChanged)
         break;
     case SlskdRunner::Stopped:
-        m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
+        if (managed())
+            m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
         break;
     case SlskdRunner::Downloading:
     case SlskdRunner::Running:
     case SlskdRunner::Failed:
         break;
     }
-    setStatus(Checking);
+    setStatus(managed() ? Checking : Offline);
 }
 
 void SlskdController::useManaged(const QString &username, const QString &password)
@@ -166,35 +154,20 @@ void SlskdController::useManaged(const QString &username, const QString &passwor
         setErrorText(tr("Could not store the Soulseek password."));
         return;
     }
-    const bool loginChanged = name != m_username || !password.isEmpty();
-    m_managed = true;
     m_username = name;
-    QSettings settings;
-    settings.setValue(kManagedKey, true);
-    settings.setValue(kUsernameKey, m_username);
+    QSettings().setValue(kUsernameKey, m_username);
     setErrorText({});
     emit settingsChanged();
-    // slskd reads the login at start: a new one needs a restart.
-    if (loginChanged && m_runner->state() == SlskdRunner::Running)
-        m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
-    else
+    // slskd reads the login at start: (re)start it, or download it first.
+    if (m_runner->state() == SlskdRunner::NotInstalled || m_runner->state() == SlskdRunner::Downloading)
         applyServer();
-}
-
-void SlskdController::useOwn()
-{
-    if (!m_managed)
-        return;
-    m_managed = false;
-    QSettings().setValue(kManagedKey, false);
-    setErrorText({});
-    emit settingsChanged();
-    applyServer();
+    else
+        restartManaged();
 }
 
 void SlskdController::restartManaged()
 {
-    if (!m_managed)
+    if (!managed())
         return;
     // start() stops a running copy first; with no install it reports NotInstalled: download it again.
     m_runner->start(m_username, CredentialStore::read(kPasswordName), m_managedApiKey);
@@ -205,7 +178,7 @@ void SlskdController::restartManaged()
 
 bool SlskdController::managed() const
 {
-    return m_managed;
+    return !m_username.isEmpty();
 }
 
 QString SlskdController::username() const
@@ -227,6 +200,8 @@ QString SlskdController::managedStatus() const
 {
     switch (m_runner->state()) {
     case SlskdRunner::NotInstalled:
+        if (!managed())
+            return tr("Enter your Soulseek username and password.");
         return tr("slskd %1 will be downloaded from GitHub (about 55 MB).").arg(QLatin1StringView(SlskdRunner::kVersion));
     case SlskdRunner::Downloading:
         return tr("Downloading slskd… %1 %").arg(qRound(m_runner->progress() * 100));
@@ -261,16 +236,6 @@ SlskdController *SlskdController::create(QQmlEngine *, QJSEngine *)
     // Owned by main.cpp; stop the QML engine from deleting it.
     QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
     return s_instance;
-}
-
-QString SlskdController::serverUrl() const
-{
-    return m_serverUrl;
-}
-
-QString SlskdController::apiKey() const
-{
-    return m_apiKey;
 }
 
 QString SlskdController::downloadFormat() const
@@ -361,19 +326,6 @@ SearchGroupsModel *SlskdController::groups() const
 DownloadsModel *SlskdController::downloads() const
 {
     return m_downloads;
-}
-
-void SlskdController::saveSettings(const QString &serverUrl, const QString &apiKey)
-{
-    m_serverUrl = serverUrl.trimmed();
-    m_apiKey = apiKey.trimmed();
-    QSettings settings;
-    settings.setValue(kServerUrlKey, m_serverUrl);
-    settings.setValue(kApiKeyKey, m_apiKey);
-    setErrorText({});
-    emit settingsChanged();
-    if (!m_managed)
-        applyServer();
 }
 
 void SlskdController::recheckStatus()
