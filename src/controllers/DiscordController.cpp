@@ -48,11 +48,11 @@ DiscordController::DiscordController(PlayerController &player, const QString &co
                                      const QString &uploadCacheFile, const QString &keysFile, QObject *parent)
     : QObject(parent)
     , m_player(player)
-    , m_keysFile(keysFile)
     , m_ipc(new DiscordIpc(this))
     , m_imgur(new ImgurUploader(uploadCacheFile, this))
     , m_covers(coverCacheDir, 16LL * 1024 * 1024)
     , m_debounce(new QTimer(this))
+    , m_keysFile(keysFile)
 {
     Q_ASSERT(!s_instance);
     s_instance = this;

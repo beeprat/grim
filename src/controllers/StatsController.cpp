@@ -133,7 +133,7 @@ void StatsController::refresh()
 
     QList<StatsListModel::Entry> artists;
     for (const ArtistStat &stat : m_database.topArtists(kTopCount))
-        artists.append({stat.artist, QString(), stat.playCount, stat.listenedMs});
+        artists.append({stat.artist, QString(), stat.playCount, stat.listenedMs, QUrl()});
 
     QList<StatsListModel::Entry> albums;
     for (const AlbumStat &stat : m_database.topAlbums(kTopCount))

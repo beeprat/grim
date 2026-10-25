@@ -47,8 +47,8 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     , m_searchTimer(new QTimer(this))
     , m_downloadsTimer(new QTimer(this))
     , m_statusTimer(new QTimer(this))
-    , m_converter(new AudioConverter(this))
     , m_runner(new SlskdRunner(this))
+    , m_converter(new AudioConverter(this))
 {
     Q_ASSERT(!s_instance);
     s_instance = this;

@@ -12,7 +12,13 @@ namespace {
 
 Track makeTrack(const QString &path, const QString &artist, qint64 durationMs = 200'000)
 {
-    return {path, u"Title "_s + path, artist, u"Album"_s, durationMs};
+    Track track;
+    track.path = path;
+    track.title = u"Title "_s + path;
+    track.artist = artist;
+    track.album = u"Album"_s;
+    track.durationMs = durationMs;
+    return track;
 }
 
 const QDateTime kStart = QDateTime::fromSecsSinceEpoch(1'700'000'000, QTimeZone::UTC);

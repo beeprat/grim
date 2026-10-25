@@ -234,10 +234,13 @@ QList<TrackStat> StatsDatabase::topTracks(int limit) const
 
     QList<TrackStat> result;
     while (query.next()) {
-        result.append({Track{query.value(0).toString(), query.value(1).toString(),
-                             query.value(2).toString(), query.value(3).toString(),
-                             query.value(4).toLongLong()},
-                       query.value(5).toLongLong(), query.value(6).toLongLong()});
+        Track track;
+        track.path = query.value(0).toString();
+        track.title = query.value(1).toString();
+        track.artist = query.value(2).toString();
+        track.album = query.value(3).toString();
+        track.durationMs = query.value(4).toLongLong();
+        result.append({track, query.value(5).toLongLong(), query.value(6).toLongLong()});
     }
     return result;
 }
