@@ -20,6 +20,19 @@ cmake --preset debug; cmake --build --preset debug   # build/debug, POST_BUILD r
 ctest --test-dir build/debug --output-on-failure
 ```
 
+Linux (Mint 22 / Ubuntu 24.04): Qt 6.10.3 from aqtinstall (`aqt install-qt linux desktop 6.10.3 linux_gcc_64 -O ~/Qt`),
+plus `sudo apt install cmake ninja-build pkg-config libavformat-dev libavcodec-dev libswresample-dev libavutil-dev
+libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0` (without `libxcb-cursor0` the xcb platform plugin fails to load).
+
+```bash
+export CMAKE_PREFIX_PATH=~/Qt/6.10.3/gcc_64
+cmake --preset debug && cmake --build --preset debug   # run ./build/debug/GRIM
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/debug --output-on-failure
+```
+
+Windows-only code (tray thumb buttons, MediaKeys, Media Foundation, Credential Manager, updater install) is checked only
+by the Windows CI (`.github/workflows/windows.yml`); test it by hand on Windows before tagging a release.
+
 - QTest exit code = failed test count. Warnings: run the test exe with `-o out.txt,txt` (`QWARN` lines).
 - Always use the Ninja presets (clangd needs `build/debug/compile_commands.json`).
 - MSVC: `/wd4702` on the app target only (qmlcachegen output triggers C4702 in Qt headers).
@@ -191,9 +204,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 
 ## Linux
 
-- Built only on GitHub Actions (`.github/workflows/linux-appimage.yml`, public repo `beeprat/grim`): Ubuntu 22.04,
+- Release AppImage built on GitHub Actions (`.github/workflows/linux-appimage.yml`, public repo `beeprat/grim`): Ubuntu 22.04,
   Qt 6.10.3, g++-12, static audio-only FFmpeg 7.1.2 (cached), tests offscreen, linuxdeploy -> `grim-x86_64.AppImage`.
-  A `v*` tag publishes a release. Nothing Linux-specific compiles on Windows.
+  A `v*` tag publishes a release. Local Linux builds: see Build.
 - The workflow copies Qt's `plugins/wayland-*` folders, or Qt Quick aborts on Wayland. Only `qsqlite` is kept.
 - `main.cpp` loads Selawik fonts (`resources/fonts`) as the Segoe UI stand-in. Window corners stay square.
 
