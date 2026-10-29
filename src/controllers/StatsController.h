@@ -45,16 +45,23 @@ public:
     QVariantMap topArtist() const;
     QVariantMap topAlbum() const;
 
+    // {playCount, listenedMs} of one artist.
+    Q_INVOKABLE QVariantMap artistStats(const QString &artist) const;
+    // The artist's cached photo, or empty; a missing one is fetched and artistImageReady follows.
+    Q_INVOKABLE QUrl artistImage(const QString &artist);
+
     // Re-reads everything from the database.
     Q_INVOKABLE void refresh();
-    // Writes the listening history to a JSON file. Empty on success, else a message for the user.
-    Q_INVOKABLE QString exportTo(const QUrl &fileUrl);
+    // Writes the listening history to a JSON file, paths also relative to the music folder so it
+    // imports on any system. Empty on success, else a message for the user.
+    Q_INVOKABLE QString exportTo(const QUrl &fileUrl, const QString &libraryFolder);
     // Adds the plays of an exported file (ones already here are skipped). A message for the user.
-    Q_INVOKABLE QString importFrom(const QUrl &fileUrl);
+    Q_INVOKABLE QString importFrom(const QUrl &fileUrl, const QString &libraryFolder);
 
 signals:
     void totalsChanged();
     void highlightsChanged();
+    void artistImageReady(const QString &artist, const QUrl &image);
 
 private:
     static inline StatsController *s_instance = nullptr;

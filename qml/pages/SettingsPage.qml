@@ -47,7 +47,7 @@ Item {
         id: backgroundDialog
 
         title: qsTr("Choose a background image")
-        nameFilters: [qsTr("Images (*.jpg *.jpeg *.png *.webp *.bmp *.gif)")]
+        nameFilters: [qsTr("Images and videos (*.jpg *.jpeg *.png *.webp *.bmp *.gif *.webm *.mp4)")]
         currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
         onAccepted: {
             const copy = SettingsController.importBackground(selectedFile)
@@ -284,6 +284,111 @@ Item {
 
                     Hint {
                         text: qsTr("Every music file in this folder and its subfolders shows up in the library. Finished Soulseek downloads are moved here, converted first to the format picked on the Soulseek page (M4A 320 kbps by default); a converted original goes to the Recycle Bin.")
+                    }
+                }
+
+                SettingsPanel {
+                    visible: PhoneSyncController.supported && PhoneSyncController.unlocked
+                    SectionTitle { text: qsTr("iPhone sync") }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Button {
+                            text: qsTr("Check iPhone")
+                            enabled: PhoneSyncController.state !== PhoneSyncController.Checking
+                                     && PhoneSyncController.state !== PhoneSyncController.Syncing
+                            onClicked: PhoneSyncController.check(SettingsController.libraryFolder)
+                        }
+
+                        AccentButton {
+                            visible: PhoneSyncController.state === PhoneSyncController.Ready
+                            text: qsTr("Sync")
+                            onClicked: PhoneSyncController.sync()
+                        }
+
+                        Button {
+                            visible: PhoneSyncController.state === PhoneSyncController.Ready
+                                     || PhoneSyncController.state === PhoneSyncController.Syncing
+                            flat: true
+                            text: PhoneSyncController.state === PhoneSyncController.Syncing ? qsTr("Stop") : qsTr("Cancel")
+                            onClicked: PhoneSyncController.cancel()
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            opacity: 0.8
+                            text: {
+                                if (PhoneSyncController.state !== PhoneSyncController.Ready)
+                                    return PhoneSyncController.message
+                                const mb = Math.round(PhoneSyncController.copyBytes / 1048576)
+                                return qsTr("%1 new, %2 updated (%3 MB), %4 to delete, %5 duplicates skipped.")
+                                        .arg(PhoneSyncController.added.length).arg(PhoneSyncController.updated.length)
+                                        .arg(mb).arg(PhoneSyncController.removed.length)
+                                        .arg(PhoneSyncController.duplicates.length)
+                            }
+                        }
+                    }
+
+                    CheckBox {
+                        text: qsTr("Don't copy duplicates")
+                        checked: PhoneSyncController.skipDuplicates
+                        onToggled: PhoneSyncController.skipDuplicates = checked
+                    }
+
+                    // What Sync will do, file by file.
+                    ListView {
+                        id: syncChanges
+
+                        readonly property var entries: {
+                            const list = []
+                            const add = (paths, kind) => { for (const p of paths) list.push({kind: kind, path: p}) }
+                            add(PhoneSyncController.added, qsTr("New"))
+                            add(PhoneSyncController.updated, qsTr("Updated"))
+                            add(PhoneSyncController.removed, qsTr("Delete"))
+                            add(PhoneSyncController.duplicates, qsTr("Duplicate, skipped"))
+                            return list
+                        }
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight, 260)
+                        visible: PhoneSyncController.state === PhoneSyncController.Ready && entries.length > 0
+                        clip: true
+                        model: entries
+                        ScrollBar.vertical: SlimScrollBar {}
+
+                        delegate: RowLayout {
+                            required property var modelData
+
+                            width: ListView.view.width
+                            spacing: 12
+
+                            Label {
+                                Layout.preferredWidth: 130
+                                text: modelData.kind
+                                color: modelData.kind === qsTr("Delete") ? Theme.danger : Theme.accent
+                                font.pixelSize: 12
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.path
+                                elide: Text.ElideMiddle
+                                opacity: 0.8
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        visible: PhoneSyncController.state === PhoneSyncController.Syncing
+                        value: PhoneSyncController.progress
+                    }
+
+                    Hint {
+                        text: qsTr("Makes MiniMoon on an iPhone (connected by cable) hold the same songs as the library, in the same folders: new and changed songs are copied, songs no longer in the library are deleted from the iPhone. Covers and the app's other files are left alone. Restart MiniMoon afterwards to see the changes.")
                     }
                 }
 

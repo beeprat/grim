@@ -163,6 +163,54 @@ AlbumMatch findAlbum(const Track &download, const QList<Track> &library)
     return match;
 }
 
+namespace {
+
+// Characters Windows refuses in names (and "/" everywhere) become "_"; trailing dots and spaces go.
+QString safeName(QString name)
+{
+    static const QRegularExpression kBad(u"[\\\\/:*?\"<>|\\x00-\\x1f]"_s);
+    name.replace(kBad, u"_"_s);
+    while (name.endsWith(u'.') || name.endsWith(u' '))
+        name.chop(1);
+    return name.trimmed();
+}
+
+// The subfolder of `parent` whose name gives `key`, else empty.
+QString findFolder(const QDir &parent, const QString &key, QString (*keyOf)(const QString &))
+{
+    for (const QString &name : parent.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (keyOf(name) == key)
+            return parent.filePath(name);
+    }
+    return {};
+}
+
+// "3. Fourth (1971)" → "Fourth": the library's numbered, dated album folders.
+QString albumFolderKey(const QString &folderName)
+{
+    static const QRegularExpression kNumber(u"^\\d+\\.\\s*"_s);
+    static const QRegularExpression kYear(u"\\s*\\(\\d{4}\\)$"_s);
+    return albumKey(QString(folderName).remove(kNumber).remove(kYear));
+}
+
+} // namespace
+
+QString libraryFolderFor(const QString &library, const QString &artist, const QString &album)
+{
+    const QString artistName = safeName(artist);
+    if (artistName.isEmpty() || library.isEmpty())
+        return {};
+    const QDir root(library);
+    QString artistFolder = findFolder(root, artistKey(artist), &artistKey);
+    if (artistFolder.isEmpty())
+        artistFolder = root.filePath(artistName);
+    const QString albumName = safeName(album);
+    if (albumName.isEmpty())
+        return artistFolder;
+    const QString albumFolder = findFolder(QDir(artistFolder), albumKey(album), &albumFolderKey);
+    return albumFolder.isEmpty() ? QDir(artistFolder).filePath(albumName) : albumFolder;
+}
+
 QByteArray majorityCover(const QStringList &paths)
 {
     QList<QByteArray> covers;

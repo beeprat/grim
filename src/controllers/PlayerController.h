@@ -55,6 +55,8 @@ class PlayerController : public QObject
     // 1.2 = faster and higher), reverb 0 = none .. 1.
     Q_PROPERTY(double speed READ speed WRITE setSpeed NOTIFY effectsChanged FINAL)
     Q_PROPERTY(double reverb READ reverb WRITE setReverb NOTIFY effectsChanged FINAL)
+    // Graphic equalizer: 16 gains in dB (31 Hz … 16 kHz), as heard; all zero = off.
+    Q_PROPERTY(QList<double> equalizer READ equalizer WRITE setEqualizer NOTIFY effectsChanged FINAL)
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY shuffleChanged FINAL)
     Q_PROPERTY(Repeat repeat READ repeat WRITE setRepeat NOTIFY repeatChanged FINAL)
     // A-B loop inside the current track (-1 = not set); playback jumps back to the start at the end.
@@ -113,6 +115,8 @@ public:
     void setSpeed(double speed);
     double reverb() const;
     void setReverb(double amount);
+    QList<double> equalizer() const;
+    void setEqualizer(const QList<double> &gainsDb);
     bool shuffle() const;
     void setShuffle(bool shuffle);
     Repeat repeat() const;
@@ -213,6 +217,7 @@ private:
     bool m_lyricsShown = true;
     double m_speed = 1;
     double m_reverb = 0;
+    QList<double> m_equalizer = QList<double>(16, 0.0);
     LyricsFetcher *m_lyricsFetcher;
     bool m_onlineLyrics = true;
     bool m_listenReported = false; // listenedLongEnough sent for this session

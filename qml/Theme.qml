@@ -69,6 +69,7 @@ QtObject {
     readonly property color hover: Qt.rgba(1, 1, 1, 0.06)
     readonly property color selected: Qt.rgba(1, 1, 1, 0.12)
     readonly property color subtle: Qt.rgba(1, 1, 1, 0.08) // badges, placeholders, outlines
+    readonly property color danger: "#e57373" // destructive actions (deletions)
 
     property Settings store: Settings {
         category: "theme"

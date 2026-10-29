@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -60,6 +61,8 @@ public:
     // lower, like a slowed-down record); reverb 0..1.
     void setSpeed(float speed);
     void setReverb(float amount);
+    // Graphic equalizer gains in dB per band (Equalizer::kBands, ±12); all zero = off.
+    void setEqualizer(const std::array<float, 16> &gainsDb);
     // Plays both channels as their average (one earbud, uneven hearing).
     void setMono(bool mono);
 

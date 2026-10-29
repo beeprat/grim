@@ -15,6 +15,8 @@ public:
 
     // The image:// URL for a file's cover, for QML Image.source.
     static QString urlFor(const QString &filePath);
+    // Changes every urlFor() result, so QML's image cache drops covers after a tag edit.
+    static void bumpRevision();
 
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
 

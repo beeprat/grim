@@ -4,6 +4,8 @@
 #include "core/LibraryDatabase.h"
 #include "core/LibraryFiles.h"
 #include "core/ReplayGain.h"
+#include "core/TagEditor.h"
+#include "providers/CoverImageProvider.h"
 #include "core/TagReader.h"
 
 #include <QDir>
@@ -15,6 +17,9 @@
 #include <QFile>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QBuffer>
+#include <QImage>
+#include <QImageReader>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QJSEngine>
@@ -289,6 +294,76 @@ QString LibraryController::deleteAlbum(const QList<QUrl> &fileUrls)
         return {};
     return tr("Could not delete %1").arg(QDir::toNativeSeparators(failed.first()))
            + (failed.size() > 1 ? tr(" and %1 more").arg(failed.size() - 1) : QString());
+}
+
+QVariantMap LibraryController::tagsOf(const QList<QUrl> &fileUrls) const
+{
+    QVariantMap common;
+    QStringList mixed;
+    bool hasCover = false;
+    bool first = true;
+    for (const QUrl &url : fileUrls) {
+        QVariantMap tags = TagEditor::read(url.toLocalFile());
+        hasCover = hasCover || tags.take(QStringLiteral("hasCover")).toBool();
+        if (first) {
+            common = tags;
+            first = false;
+            continue;
+        }
+        for (auto it = tags.cbegin(); it != tags.cend(); ++it) {
+            if (!mixed.contains(it.key()) && common.value(it.key()) != it.value()) {
+                mixed.append(it.key());
+                common.insert(it.key(), QString());
+            }
+        }
+    }
+    common.insert(QStringLiteral("mixed"), mixed);
+    common.insert(QStringLiteral("hasCover"), hasCover);
+    // The first file's cover, for the dialog's preview.
+    common.insert(QStringLiteral("coverUrl"),
+                  fileUrls.isEmpty() ? QString() : CoverImageProvider::urlFor(fileUrls.first().toLocalFile()));
+    return common;
+}
+
+QString LibraryController::writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,
+                                     const QUrl &coverUrl)
+{
+    QByteArray coverData;
+    const auto coverAction = static_cast<TagEditor::Cover>(std::clamp(cover, 0, 2));
+    if (coverAction == TagEditor::Cover::Replace) {
+        // JPEG and PNG go in as they are; anything else is converted to JPEG.
+        QFile file(coverUrl.toLocalFile());
+        if (!file.open(QIODevice::ReadOnly) || (coverData = file.readAll()).isEmpty())
+            return tr("This picture could not be used.");
+        const QByteArray format = QImageReader(coverUrl.toLocalFile()).format();
+        if (format != "jpeg" && format != "png") {
+            const QImage image = QImage::fromData(coverData);
+            coverData.clear();
+            QBuffer buffer(&coverData);
+            if (image.isNull() || !image.save(&buffer, "JPG", 90))
+                return tr("This picture could not be used.");
+        }
+    }
+
+    QString error;
+    QStringList written;
+    for (const QUrl &url : fileUrls) {
+        const QString path = url.toLocalFile();
+        error = TagEditor::write(path, fields, coverAction, coverData);
+        if (!error.isEmpty())
+            break;
+        written.append(path);
+    }
+    if (coverAction != TagEditor::Cover::Keep && !written.isEmpty())
+        CoverImageProvider::bumpRevision();
+    // Re-read what was written, so the library shows the new tags and covers.
+    m_tracks->removeTracks(written);
+    m_pickerTracks->removeTracks(written);
+    for (const QString &path : std::as_const(written))
+        addFile(path);
+    ++m_metaRevision;
+    emit metaChanged();
+    return error;
 }
 
 void LibraryController::addFile(const QString &path)

@@ -77,6 +77,16 @@ public:
     // and drops them from the library. Empty on success, else a message for the user.
     Q_INVOKABLE QString deleteAlbum(const QList<QUrl> &fileUrls);
 
+    // Tags of these files for the "Edit info" dialog: each field's value when all files agree,
+    // else empty with its key listed in "mixed"; plus "hasCover" (any file has one) and "coverUrl"
+    // (the first file's cover).
+    Q_INVOKABLE QVariantMap tagsOf(const QList<QUrl> &fileUrls) const;
+    // Writes the given fields (absent ones stay; empty clears) to every file. cover: 0 keep,
+    // 1 replace with the picture at coverUrl, 2 remove. The files are re-read into the library.
+    // Empty on success, else a message for the user.
+    Q_INVOKABLE QString writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,
+                                  const QUrl &coverUrl);
+
     // nullptr if the file is not in the library.
     const Track *findTrack(const QString &path) const;
 

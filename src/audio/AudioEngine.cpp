@@ -1,5 +1,6 @@
 #include "audio/AudioEngine.h"
 #include "audio/AacSource.h"
+#include "audio/Equalizer.h"
 #include "audio/Reverb.h"
 
 #include <miniaudio.h>
@@ -35,11 +36,16 @@ struct EffectsNode
 {
     ma_node_base base{}; // first member: miniaudio treats a pointer to this struct as the node
     ma_uint32 channels = 2;
+    Equalizer equalizer;
+    std::array<std::atomic<float>, Equalizer::kBands> eqGains{};
+    std::atomic<unsigned> eqRevision{0}; // bumped after eqGains change
     Reverb reverb;
     std::atomic<float> reverbAmount{0};
     std::atomic<bool> mono{false};
     // Mixing-thread state.
     float appliedReverb = 0;
+    unsigned appliedEq = 0;
+    bool eqOn = false;
 
     static void process(ma_node *node, const float **framesIn, ma_uint32 *frameCountIn, float **framesOut,
                         ma_uint32 *frameCountOut)
@@ -50,6 +56,24 @@ struct EffectsNode
         float *out = framesOut[0];
 
         std::copy(framesIn[0], framesIn[0] + samples, out);
+
+        // Equalizer first, so the reverb tail carries its sound too.
+        const unsigned revision = self->eqRevision.load(std::memory_order_acquire);
+        if (revision != self->appliedEq) {
+            std::array<float, Equalizer::kBands> gains{};
+            bool on = false;
+            for (int band = 0; band < Equalizer::kBands; ++band) {
+                gains[band] = self->eqGains[band].load(std::memory_order_relaxed);
+                on = on || gains[band] != 0;
+            }
+            if (on && !self->eqOn)
+                self->equalizer.clear();
+            self->equalizer.setGains(gains);
+            self->eqOn = on;
+            self->appliedEq = revision;
+        }
+        if (self->eqOn)
+            self->equalizer.process(out, frames);
 
         const float amount = self->reverbAmount.load(std::memory_order_relaxed);
         if (amount != self->appliedReverb) {
@@ -178,6 +202,8 @@ void AudioEngine::Impl::start(ma_device_id *device)
     effects.channels = ma_engine_get_channels(&engine);
     const ma_uint32 rate = ma_engine_get_sample_rate(&engine);
     effects.reverb.prepare(rate);
+    effects.equalizer.prepare(rate, effects.channels);
+    effects.appliedEq = effects.eqRevision.load() - 1; // apply the gains set before the device opened
     ma_node_config config = ma_node_config_init();
     config.vtable = &kEffectsVtable;
     config.pInputChannels = &effects.channels;
@@ -439,6 +465,13 @@ void AudioEngine::setSpeed(float speed)
         if (slot.loaded)
             ma_sound_set_pitch(&slot.sound, speed);
     }
+}
+
+void AudioEngine::setEqualizer(const std::array<float, 16> &gainsDb)
+{
+    for (int band = 0; band < Equalizer::kBands; ++band)
+        m_impl->effects.eqGains[band].store(gainsDb[band], std::memory_order_relaxed);
+    m_impl->effects.eqRevision.fetch_add(1, std::memory_order_release);
 }
 
 void AudioEngine::setMono(bool mono)

@@ -35,10 +35,12 @@ StatsController::StatsController(StatsDatabase &database, QObject *parent)
     , m_topArtists(new StatsListModel(this))
     , m_topAlbums(new StatsListModel(this))
     , m_artistImages(new ArtistImageFetcher(
-          QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + u"/artists"_s, this))
+          QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + u"/artist-photos"_s, this))
 {
     Q_ASSERT(!s_instance);
     s_instance = this;
+    // Square Deezer photos from before the YouTube Music banners.
+    QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + u"/artists"_s).removeRecursively();
 }
 
 StatsController::~StatsController()
@@ -52,6 +54,23 @@ StatsController *StatsController::create(QQmlEngine *, QJSEngine *)
     // Owned by main.cpp; stop the QML engine from deleting it.
     QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
     return s_instance;
+}
+
+QVariantMap StatsController::artistStats(const QString &artist) const
+{
+    const ArtistStat stat = m_database.isOpen() ? m_database.artistStat(artist) : ArtistStat{};
+    return {{u"playCount"_s, stat.playCount}, {u"listenedMs"_s, stat.listenedMs}};
+}
+
+QUrl StatsController::artistImage(const QString &artist)
+{
+    if (artist.isEmpty())
+        return {};
+    bool known = false;
+    const QUrl image = m_artistImages->cached(artist, &known);
+    if (!known)
+        m_artistImages->fetch(artist, [this, artist](const QUrl &file) { emit artistImageReady(artist, file); });
+    return image;
 }
 
 qint64 StatsController::totalPlays() const
@@ -94,21 +113,21 @@ QVariantMap StatsController::topAlbum() const
     return m_topAlbum;
 }
 
-QString StatsController::exportTo(const QUrl &fileUrl)
+QString StatsController::exportTo(const QUrl &fileUrl, const QString &libraryFolder)
 {
-    const QByteArray json = m_database.exportJson();
+    const QByteArray json = m_database.exportJson(libraryFolder);
     QSaveFile file(fileUrl.toLocalFile());
     if (json.isEmpty() || !file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit())
         return tr("Could not export to %1").arg(QDir::toNativeSeparators(fileUrl.toLocalFile()));
     return {};
 }
 
-QString StatsController::importFrom(const QUrl &fileUrl)
+QString StatsController::importFrom(const QUrl &fileUrl, const QString &libraryFolder)
 {
     QFile file(fileUrl.toLocalFile());
     if (!file.open(QIODevice::ReadOnly))
         return tr("Could not open %1").arg(QDir::toNativeSeparators(fileUrl.toLocalFile()));
-    const int added = m_database.importJson(file.readAll());
+    const int added = m_database.importJson(file.readAll(), libraryFolder);
     if (added < 0)
         return tr("%1 is not a grim. statistics export").arg(QFileInfo(file).fileName());
     refresh();

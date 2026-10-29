@@ -2,6 +2,7 @@ import QtCore
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Dialogs
 // Importing the Material module directly selects the style at compile time.
 import QtQuick.Controls.Material
 import MusicPlayer
@@ -643,60 +644,29 @@ ApplicationWindow {
     background: Rectangle {
         color: Theme.window
 
-        Image {
-            id: wallpaper
+        // A video (webm, mp4) plays muted on a loop; anything else is a still picture. Both come
+        // already blurred and darkened from C++ (core/WallpaperBlur), so resizing only stretches them.
+        readonly property bool video: /\.(webm|mp4)$/i.test(Theme.backgroundImage.toString())
 
+        Image {
             anchors.fill: parent
-            source: Theme.backgroundImage
-            visible: false // drawn by the blur below
+            visible: !parent.video && Theme.backgroundImage !== ""
+            source: visible ? "image://wallpaper/" + Math.round(Theme.backgroundBlur * 1000) + "/"
+                              + encodeURIComponent(Theme.backgroundImage) : ""
             fillMode: Theme.backgroundFill
             asynchronous: true
-            // Blurred anyway: a small decode keeps memory and the blur cheap.
-            sourceSize: Qt.size(960, 960)
+            retainWhileLoading: true // no flash while the Blur slider moves
+            cache: false
         }
 
-        MultiEffect {
-            id: wallpaperEffect
-
+        WallpaperVideo {
             anchors.fill: parent
-            source: wallpaper
-            visible: false // drawn by the frozen copy below
-            blurEnabled: Theme.backgroundBlur > 0
+            visible: parent.video
+            source: parent.video ? Theme.backgroundImage : ""
+            fillMode: Theme.backgroundFill
             blur: Theme.backgroundBlur
-            blurMax: 64
-            brightness: -0.25
-        }
-
-        // The blur is computed once into a texture instead of on every frame the window redraws;
-        // redone shortly after the image, blur, fill or window size changes.
-        ShaderEffectSource {
-            anchors.fill: parent
-            sourceItem: wallpaperEffect
-            visible: Theme.backgroundImage !== "" && wallpaper.status === Image.Ready
-            live: false
-            hideSource: true
-
-            Timer {
-                id: wallpaperRefresh
-
-                interval: 100
-                onTriggered: parent.scheduleUpdate()
-            }
-
-            Connections {
-                target: wallpaperEffect
-                function onWidthChanged() { wallpaperRefresh.restart() }
-                function onHeightChanged() { wallpaperRefresh.restart() }
-                function onBlurChanged() { wallpaperRefresh.restart() }
-                function onBlurEnabledChanged() { wallpaperRefresh.restart() }
-            }
-
-            Connections {
-                target: wallpaper
-                function onStatusChanged() { wallpaperRefresh.restart() }
-                function onFillModeChanged() { wallpaperRefresh.restart() }
-                function onSourceChanged() { wallpaperRefresh.restart() }
-            }
+            // No decoding while nobody can see it.
+            active: root.visible && root.visibility !== Window.Minimized
         }
     }
 
@@ -745,6 +715,198 @@ ApplicationWindow {
         onNewPlaylistRequested: (fileUrls) => newPlaylistWindow.openWith(fileUrls)
         onDeleteAlbumRequested: (fileUrls) => deleteAlbumDialog.ask(fileUrls)
         onGainRequested: (fileUrls) => gainDialog.ask(fileUrls)
+        onEditInfoRequested: (fileUrls) => tagDialog.ask(fileUrls)
+    }
+
+    // Edits the files' tags (LibraryController.tagsOf / writeTags). With several files, fields
+    // that differ show "Several values" and only fields that are typed into get written.
+    Dialog {
+        id: tagDialog
+
+        property var urls: []
+        property var original: ({})
+        property int coverAction: 0 // 0 keep, 1 replace, 2 remove
+        property url newCover
+        property string failure
+        readonly property bool several: urls.length > 1
+        readonly property var keys: ["title", "artist", "albumArtist", "album", "genre", "year", "track", "composer", "label"]
+        readonly property var labels: [qsTr("Title"), qsTr("Artist"), qsTr("Album artist"), qsTr("Album"),
+                                       qsTr("Genre"), qsTr("Year"), qsTr("Track number"), qsTr("Composer"),
+                                       qsTr("Label")]
+
+        function ask(fileUrls) {
+            urls = fileUrls
+            original = LibraryController.tagsOf(fileUrls)
+            coverAction = 0
+            newCover = ""
+            failure = ""
+            for (let i = 0; i < tagFields.count; ++i)
+                tagFields.itemAt(i).reset()
+            open()
+        }
+
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(560, parent.width - 40)
+        modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
+        title: several ? qsTr("Edit info (%1 tracks)").arg(urls.length) : qsTr("Edit info")
+        standardButtons: Dialog.Save | Dialog.Cancel
+        onAccepted: {
+            const fields = {}
+            for (let i = 0; i < tagFields.count; ++i) {
+                const field = tagFields.itemAt(i)
+                if (field.edited)
+                    fields[field.key] = field.text
+            }
+            failure = LibraryController.writeTags(urls, fields, coverAction, newCover)
+            if (failure !== "")
+                open() // stay open with the message
+        }
+
+        FileDialog {
+            id: coverPicker
+
+            title: qsTr("Choose a cover picture")
+            nameFilters: [qsTr("Images (*.jpg *.jpeg *.png *.webp *.bmp)")]
+            currentFolder: StandardPaths.writableLocation(StandardPaths.PicturesLocation)
+            onAccepted: {
+                tagDialog.newCover = selectedFile
+                tagDialog.coverAction = 1
+            }
+        }
+
+        RowLayout {
+            width: parent.width
+            spacing: 16
+
+            // Cover: current, newly picked, or none.
+            ColumnLayout {
+                Layout.alignment: Qt.AlignTop
+                Layout.fillWidth: false
+                spacing: 4
+
+                Rectangle {
+                    Layout.preferredWidth: 120
+                    Layout.preferredHeight: 120
+                    radius: 6
+                    color: Theme.subtle
+                    clip: true
+
+                    Image {
+                        id: tagCover
+
+                        anchors.fill: parent
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                        source: tagDialog.coverAction === 1 ? tagDialog.newCover
+                              : tagDialog.coverAction === 0 && tagDialog.original.hasCover === true
+                                ? tagDialog.original.coverUrl : ""
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        visible: tagCover.status !== Image.Ready
+                        text: qsTr("No cover")
+                        opacity: 0.5
+                        font.pixelSize: 12
+                    }
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 0
+
+                    Button {
+                        flat: true
+                        leftPadding: 6
+                        rightPadding: 6
+                        font.pixelSize: 12
+                        text: qsTr("Change…")
+                        onClicked: coverPicker.open()
+                    }
+                    Button {
+                        flat: true
+                        leftPadding: 6
+                        rightPadding: 6
+                        font.pixelSize: 12
+                        text: qsTr("Remove")
+                        enabled: tagDialog.coverAction === 1 || (tagDialog.coverAction === 0 && tagDialog.original.hasCover === true)
+                        onClicked: tagDialog.coverAction = 2
+                    }
+                }
+            }
+
+            // One row per field: small label, slim outlined box.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                spacing: 6
+
+                Repeater {
+                    id: tagFields
+
+                    model: tagDialog.keys.length
+
+                    delegate: RowLayout {
+                        id: row
+
+                        required property int index
+                        readonly property string key: tagDialog.keys[index]
+                        readonly property bool mixed: (tagDialog.original.mixed || []).includes(key)
+                        property alias text: field.text
+                        property bool edited: false
+
+                        function reset() {
+                            field.text = tagDialog.original[key] || ""
+                            edited = false
+                        }
+
+                        Layout.fillWidth: true
+                        spacing: 10
+                        // A title or track number is one song's own.
+                        enabled: !(tagDialog.several && (key === "title" || key === "track"))
+
+                        Label {
+                            Layout.preferredWidth: 84
+                            text: tagDialog.labels[row.index]
+                            opacity: 0.6
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
+
+                        TextField {
+                            id: field
+
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 32
+                            Material.containerStyle: Material.Outlined
+                            topPadding: 0
+                            bottomPadding: 0
+                            leftPadding: 10
+                            font.pixelSize: 13
+                            selectByMouse: true
+                            placeholderText: row.mixed ? qsTr("Several values") : ""
+                            inputMethodHints: row.key === "year" || row.key === "track" ? Qt.ImhDigitsOnly : Qt.ImhNone
+                            validator: RegularExpressionValidator {
+                                regularExpression: row.key === "year" || row.key === "track" ? /\d{0,4}/ : /.*/
+                            }
+                            onTextEdited: row.edited = true
+                        }
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: tagDialog.failure !== ""
+                    text: tagDialog.failure
+                    color: Theme.danger
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
     }
 
     // A song's own volume in dB (LibraryController.setReplayGainDb); the file's ReplayGain tag is shown as a hint.
@@ -905,14 +1067,15 @@ ApplicationWindow {
                             anchors.margins: 8
                             spacing: 4
 
-                            // While an album is open it is the way back to the grid (same as Escape).
+                            // While an album or artist is open it is the way back (same as Escape): album to
+                            // the grid it came from, artist to the whole library.
                             NavButton {
-                                readonly property bool back: root.page === 0 && libraryPage.openAlbum >= 0
+                                readonly property bool back: root.page === 0 && (libraryPage.openAlbum >= 0 || libraryPage.artistMode)
 
                                 page: 0
                                 text: back ? qsTr("Back") : qsTr("Library")
                                 icon.source: back ? "icons/back.svg" : "icons/library.svg"
-                                onClicked: if (back) libraryPage.openAlbum = -1
+                                onClicked: if (back) libraryPage.goBack()
                             }
                             NavButton { page: 1; text: qsTr("Playlists"); icon.source: "icons/playlist.svg" }
                             NavButton { page: 2; text: qsTr("Statistics"); icon.source: "icons/statistics.svg" }

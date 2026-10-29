@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import QtQuick.Controls.impl // IconImage: a tinted SVG icon
+import QtQuick.Effects
 import MusicPlayer
 
 Item {
@@ -12,15 +13,25 @@ Item {
     property int openAlbum: -1
 
     // Leaving the album page: Escape, or the mouse's back button anywhere on this page.
+    // Grid scroll position when an album was opened, to come back to the same spot.
+    property real gridScroll: 0
+    function goBack() {
+        if (openAlbum >= 0) {
+            openAlbum = -1
+            const y = gridScroll
+            Qt.callLater(() => albumGrid.contentY = y)
+        } else
+            LibraryController.artistFilter = ""
+    }
     Shortcut {
         sequence: "Escape"
-        enabled: page.visible && page.openAlbum >= 0
-        onActivated: page.openAlbum = -1
+        enabled: page.visible && (page.openAlbum >= 0 || page.artistMode)
+        onActivated: page.goBack()
     }
     TapHandler {
         acceptedButtons: Qt.BackButton
-        enabled: page.openAlbum >= 0
-        onTapped: page.openAlbum = -1
+        enabled: page.openAlbum >= 0 || page.artistMode
+        onTapped: page.goBack()
     }
     property string openAlbumTitle
     property string openAlbumArtist
@@ -86,6 +97,8 @@ Item {
         const info = LibraryController.albums.albumInfo(row)
         if (info.title === undefined)
             return
+        if (openAlbum < 0)
+            gridScroll = albumGrid.contentY
         openAlbum = row
         openAlbumTitle = info.title
         openAlbumArtist = info.artist
@@ -145,6 +158,39 @@ Item {
         viewSettings.albums = true
         LibraryController.filter = ""
         LibraryController.artistFilter = name
+    }
+
+    // Artist page: the albums grid of one artist under a photo header with listening stats.
+    readonly property bool artistMode: viewSettings.albums && LibraryController.artistFilter !== ""
+    property url artistPhoto
+    property var artistStats: ({playCount: 0, listenedMs: 0})
+
+    function loadArtist() {
+        const name = LibraryController.artistFilter
+        artistPhoto = name !== "" ? StatsController.artistImage(name) : ""
+        refreshArtistStats()
+    }
+    function refreshArtistStats() {
+        if (LibraryController.artistFilter !== "")
+            artistStats = StatsController.artistStats(LibraryController.artistFilter)
+    }
+    function formatListened(ms) {
+        const minutes = Math.floor(ms / 60000)
+        const hours = Math.floor(minutes / 60)
+        return hours > 0 ? qsTr("%1 h %2 min").arg(hours).arg(minutes % 60) : qsTr("%1 min").arg(minutes)
+    }
+
+    Connections {
+        target: LibraryController
+        function onArtistFilterChanged() { page.loadArtist() }
+    }
+    Connections {
+        target: StatsController
+        function onTotalsChanged() { page.refreshArtistStats() }
+        function onArtistImageReady(artist, image) {
+            if (artist === LibraryController.artistFilter)
+                page.artistPhoto = image
+        }
     }
 
     function playAlbum(trackIndex) {
@@ -347,6 +393,8 @@ Item {
         property string cover
         property string primary
         property string secondary
+        // The artist at the start of `secondary`: clicking it opens the artist's page.
+        property string artistName
 
         signal contextMenu()
 
@@ -377,14 +425,46 @@ Item {
             }
 
             Label {
+                id: tileSecondary
+
                 Layout.fillWidth: true
                 text: tile.secondary
                 elide: Text.ElideRight
-                opacity: 0.6
+                opacity: tileArtistMouse.containsMouse ? 1 : 0.6
                 font.pixelSize: 12
+
+                ArtistLink {
+                    id: tileArtistMouse
+
+                    label: tileSecondary
+                    artist: tile.artistName
+                }
             }
 
         }
+    }
+
+    // Over the artist name at the start of a label: underlines it on hover and opens the artist's
+    // page on click (only over the name, not the rest of the line).
+    component ArtistLink: MouseArea {
+        id: link
+
+        required property Label label
+        property string artist
+
+        TextMetrics {
+            id: artistWidth
+
+            font: link.label.font
+            text: link.artist
+        }
+
+        width: Math.min(artistWidth.advanceWidth, label.width)
+        height: label.height
+        enabled: artist !== ""
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: page.showArtist(artist)
     }
 
     Card {
@@ -404,6 +484,7 @@ Item {
             GridLayout {
                 readonly property bool narrow: page.width < 720
 
+                visible: !page.artistMode
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 columns: narrow ? 1 : 5
@@ -464,14 +545,6 @@ Item {
                                                        : (n === 1 ? qsTr("1 track") : qsTr("%1 tracks").arg(n))
                         }
                     }
-                }
-
-                Button {
-                    visible: LibraryController.artistFilter !== ""
-                    flat: true
-                    text: qsTr("Albums by %1").arg(LibraryController.artistFilter) + "   ✕"
-                    Material.foreground: Theme.accent
-                    onClicked: LibraryController.artistFilter = ""
                 }
 
                 // The genre picked in the genre list; ✕ goes back to the list.
@@ -600,6 +673,108 @@ Item {
                 ScrollBar.vertical: SlimScrollBar {}
                 FastWheelScroll { flickable: albumGrid }
 
+                header: page.artistMode ? artistHeader : null
+                Component {
+                    id: artistHeader
+
+                    Item {
+                        width: albumGrid.width
+                        height: artistHero.height + 16
+
+                        // Artist header: photo (or the first album's cover) with plays and time listened
+                        // above the name, the album count under it.
+                        Rectangle {
+                            id: artistHero
+
+                            width: albumGrid.width
+                            // Grows with the window, like a banner: wide and short. Scrolls away with the albums.
+                            height: Math.max(240, Math.min(width * 0.3, 440))
+                            color: "transparent"
+                            clip: true
+
+                            Image {
+                                anchors.fill: parent
+                                source: page.artistPhoto.toString() !== "" ? page.artistPhoto
+                                        : (page.artistMode && LibraryController.albums.count > 0
+                                           ? LibraryController.albums.albumInfo(0).coverUrl ?? "" : "")
+                                sourceSize.width: 2160
+                                fillMode: Image.PreserveAspectCrop
+                                smooth: true
+                                mipmap: true
+                                asynchronous: true
+                                opacity: status === Image.Ready ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 200 } }
+                                // Fades out toward the bottom into the page itself.
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: heroFade
+                                    maskThresholdMin: 0.5
+                                    maskSpreadAtMin: 1
+                                }
+                            }
+                            Rectangle {
+                                id: heroFade
+
+                                anchors.fill: parent
+                                visible: false
+                                layer.enabled: true
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: "white" }
+                                    GradientStop { position: 0.45; color: "white" }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+
+                            // Darkens the bottom so the white text reads on any photo.
+                            Rectangle {
+                                anchors.fill: parent
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: "#00000000" }
+                                    GradientStop { position: 0.6; color: "#40000000" }
+                                    GradientStop { position: 1.0; color: "#00000000" }
+                                }
+                            }
+
+
+                            ColumnLayout {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 32
+                                spacing: 0
+
+                                Label {
+                                    text: {
+                                        const plays = page.artistStats.playCount
+                                        const albums = LibraryController.albums.count
+                                        return (albums === 1 ? qsTr("1 album") : qsTr("%1 albums").arg(albums))
+                                               + "  ·  " + (plays === 1 ? qsTr("1 play") : qsTr("%1 plays").arg(plays))
+                                               + "  ·  " + qsTr("%1 listened").arg(page.formatListened(page.artistStats.listenedMs))
+                                    }
+                                    color: "white"
+                                    opacity: 0.85
+                                    font.pixelSize: 15
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: LibraryController.artistFilter
+                                    color: "white"
+                                    font.pixelSize: Math.max(44, Math.min(artistHero.width * 0.08, 88))
+                                    font.weight: Font.Black
+                                    // Big glyphs sit a little right of their box and have empty space above:
+                                    // pull it in line with the stats and close to them.
+                                    Layout.leftMargin: -Math.round(font.pixelSize * 0.06)
+                                    Layout.topMargin: -Math.round(font.pixelSize * 0.14)
+                                    elide: Text.ElideRight
+                                    fontSizeMode: Text.HorizontalFit
+                                    minimumPixelSize: 28
+                                }
+                            }
+                        }
+                    }
+                }
+
                 delegate: LibraryTile {
                     required property int index
                     required property string title
@@ -618,6 +793,7 @@ Item {
                     cover: coverUrl
                     primary: title
                     secondary: page.albumSubtitle(artist, year, genre, rating)
+                    artistName: artist
                     onClicked: page.showAlbum(index)
                     onContextMenu: ApplicationWindow.window.openTrackMenu(LibraryController.albums.urlsOf(index), true)
                 }

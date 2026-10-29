@@ -17,6 +17,7 @@
 #include "core/StatsDatabase.h"
 #include "core/UserDataMigration.h"
 #include "providers/CoverImageProvider.h"
+#include "providers/WallpaperImageProvider.h"
 #include "providers/LibraryModel.h"
 
 #include <QApplication>
@@ -169,6 +170,7 @@ int main(int argc, char *argv[])
     engine.addImageProvider(QStringLiteral("cover"),
                             new CoverImageProvider(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
                                                    + QStringLiteral("/covers")));
+    engine.addImageProvider(QStringLiteral("wallpaper"), new WallpaperImageProvider);
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

@@ -60,6 +60,29 @@ class TestDownloadTagger : public QObject
     Q_OBJECT
 
 private slots:
+    void picksArtistAndAlbumFolders()
+    {
+        QTemporaryDir library;
+        const QDir root(library.path());
+        // A new artist and album: both created by name.
+        QCOMPARE(DownloadTagger::libraryFolderFor(library.path(), u"Soft Machine"_s, u"Fourth"_s),
+                 root.filePath(u"Soft Machine/Fourth"_s));
+        // An existing artist folder (any case) and numbered, dated album folder are reused.
+        QVERIFY(root.mkpath(u"soft machine/4. Fourth (1971)"_s));
+        QCOMPARE(DownloadTagger::libraryFolderFor(library.path(), u"Soft Machine"_s, u"Fourth"_s),
+                 root.filePath(u"soft machine/4. Fourth (1971)"_s));
+        // A new album of a known artist goes inside its folder.
+        QCOMPARE(DownloadTagger::libraryFolderFor(library.path(), u"Soft Machine"_s, u"Third"_s),
+                 root.filePath(u"soft machine/Third"_s));
+        // No album: the artist folder; no artist: nothing (the old placement applies).
+        QCOMPARE(DownloadTagger::libraryFolderFor(library.path(), u"Soft Machine"_s, QString()),
+                 root.filePath(u"soft machine"_s));
+        QVERIFY(DownloadTagger::libraryFolderFor(library.path(), QString(), u"Fourth"_s).isEmpty());
+        // Names unsafe for a file system are cleaned.
+        QCOMPARE(DownloadTagger::libraryFolderFor(library.path(), u"AC/DC"_s, u"Who: Me?"_s),
+                 root.filePath(u"AC_DC/Who_ Me_"_s));
+    }
+
     void cleansEditionNotesFromTitles_data()
     {
         QTest::addColumn<QString>("title");

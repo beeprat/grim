@@ -18,6 +18,7 @@ CompactMenu {
     signal newPlaylistRequested(var fileUrls)
     signal deleteAlbumRequested(var fileUrls)
     signal gainRequested(var fileUrls)
+    signal editInfoRequested(var fileUrls)
 
     CompactMenuItem {
         text: root.urls.length > 1 ? qsTr("Play album") : qsTr("Play")
@@ -63,6 +64,11 @@ CompactMenu {
     CompactMenuItem {
         text: qsTr("Volume adjustment…")
         onTriggered: root.gainRequested(root.urls)
+    }
+
+    CompactMenuItem {
+        text: qsTr("Edit info…")
+        onTriggered: root.editInfoRequested(root.urls)
     }
 
     CompactMenuItem {

@@ -24,6 +24,7 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     , m_player(player)
     , m_tray(new QSystemTrayIcon(icon, this))
 {
+#ifdef Q_OS_WIN
     // The title of what is playing, centered, as a heading; clicking it opens the window.
     m_nowPlaying = new QToolButton;
     m_nowPlaying->setAutoRaise(true);
@@ -62,12 +63,6 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     controlsAction->setDefaultWidget(controls);
     m_menu.addAction(controlsAction);
     m_menu.addSeparator();
-    connect(&m_player, &PlayerController::shuffleChanged, this, &TrayController::updateNowPlaying);
-    connect(&m_player, &PlayerController::repeatChanged, this, &TrayController::updateNowPlaying);
-    connect(&m_player, &PlayerController::trackChanged, this, &TrayController::updateNowPlaying);
-    connect(&m_player, &PlayerController::playingChanged, this, &TrayController::updateNowPlaying);
-    connect(&m_settings, &SettingsController::translationApplied, this, &TrayController::updateNowPlaying);
-    updateNowPlaying();
     // Centered like the title above.
     auto *quit = new QToolButton;
     quit->setAutoRaise(true);
@@ -78,6 +73,27 @@ TrayController::TrayController(SettingsController &settings, PlayerController &p
     quitAction->setDefaultWidget(quit);
     m_menu.addAction(quitAction);
     m_menu.setFixedWidth(kMenuWidth);
+#else
+    m_nowPlayingAction = m_menu.addAction(QString(), this, [this] { restoreWindow(); });
+    m_menu.addSeparator();
+    m_playPauseAction = m_menu.addAction(QString(), this, [this] { m_player.togglePlay(); });
+    m_previousAction = m_menu.addAction(tr("Previous"), this, [this] { m_player.previous(); });
+    m_nextAction = m_menu.addAction(tr("Next"), this, [this] { m_player.next(); });
+    m_shuffleAction = m_menu.addAction(tr("Shuffle"), this, [this] { m_player.setShuffle(!m_player.shuffle()); });
+    m_shuffleAction->setCheckable(true);
+    m_repeatAction = m_menu.addAction(QString(), this, [this] {
+        m_player.setRepeat(PlayerController::Repeat((m_player.repeat() + 1) % 3));
+    });
+    m_repeatAction->setCheckable(true);
+    m_menu.addSeparator();
+    m_menu.addAction(tr("Quit"), qApp, &QCoreApplication::quit);
+#endif
+    connect(&m_player, &PlayerController::shuffleChanged, this, &TrayController::updateNowPlaying);
+    connect(&m_player, &PlayerController::repeatChanged, this, &TrayController::updateNowPlaying);
+    connect(&m_player, &PlayerController::trackChanged, this, &TrayController::updateNowPlaying);
+    connect(&m_player, &PlayerController::playingChanged, this, &TrayController::updateNowPlaying);
+    connect(&m_settings, &SettingsController::translationApplied, this, &TrayController::updateNowPlaying);
+    updateNowPlaying();
     m_tray->setContextMenu(&m_menu);
 
     connect(m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -106,6 +122,19 @@ void TrayController::setWindow(QWindow *window)
 
 void TrayController::updateNowPlaying()
 {
+    if (m_nowPlayingAction) {
+        m_shuffleAction->setChecked(m_player.shuffle());
+        m_repeatAction->setChecked(m_player.repeat() != PlayerController::RepeatOff);
+        m_repeatAction->setText(m_player.repeat() == PlayerController::RepeatOne ? tr("Repeat one") : tr("Repeat"));
+        m_playPauseAction->setText(m_player.playing() ? tr("Pause") : tr("Play"));
+        for (QAction *action : {m_playPauseAction, m_previousAction, m_nextAction})
+            action->setEnabled(m_player.hasTrack());
+        // "&" would turn the next letter into a keyboard shortcut.
+        m_nowPlayingAction->setText(m_player.hasTrack() ? QString(m_player.title()).replace(u'&', u"&&"_s)
+                                                        : tr("Nothing playing"));
+        m_nowPlayingAction->setEnabled(m_player.hasTrack());
+        return;
+    }
     m_shuffle->setIcon(menuIcon(u"shuffle"_s));
     m_shuffle->setChecked(m_player.shuffle());
     m_previous->setIcon(menuIcon(u"previous"_s));

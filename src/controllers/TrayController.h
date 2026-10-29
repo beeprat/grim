@@ -6,6 +6,7 @@
 
 class PlayerController;
 class QSystemTrayIcon;
+class QAction;
 class QToolButton;
 class QWindow;
 class SettingsController;
@@ -31,12 +32,20 @@ private:
 
     SettingsController &m_settings;
     PlayerController &m_player;
-    QToolButton *m_nowPlaying;
-    QToolButton *m_shuffle;
-    QToolButton *m_previous;
-    QToolButton *m_playPause;
-    QToolButton *m_next;
-    QToolButton *m_repeat;
+    // Windows: the menu is rows of widgets. Elsewhere tray menus are sent to the desktop over
+    // D-Bus, which shows only plain actions (widget rows came up blank), so it uses these instead.
+    QToolButton *m_nowPlaying = nullptr;
+    QToolButton *m_shuffle = nullptr;
+    QToolButton *m_previous = nullptr;
+    QToolButton *m_playPause = nullptr;
+    QToolButton *m_next = nullptr;
+    QToolButton *m_repeat = nullptr;
+    QAction *m_nowPlayingAction = nullptr;
+    QAction *m_shuffleAction = nullptr;
+    QAction *m_previousAction = nullptr;
+    QAction *m_playPauseAction = nullptr;
+    QAction *m_nextAction = nullptr;
+    QAction *m_repeatAction = nullptr;
     QSystemTrayIcon *m_tray;
     QMenu m_menu; // QMenu is a widget; it cannot have a QObject parent
     QPointer<QWindow> m_window;

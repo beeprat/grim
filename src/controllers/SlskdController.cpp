@@ -525,9 +525,13 @@ void SlskdController::importToLibrary(const QString &path, const QString &downlo
         && QFile::rename(path, info.dir().filePath(fileName)))
         source = info.dir().filePath(fileName);
 
+    // A new album goes into <Artist>/<Album> (existing folders reused); without an artist tag it
+    // keeps its download folder as before.
     QString error;
-    const QString moved = match.found
-                              ? LibraryFiles::moveIntoFolder(source, match.folder, &error)
+    const QString folder = match.found ? match.folder
+                                       : DownloadTagger::libraryFolderFor(m_settings.libraryFolder(), tags.artist, tags.album);
+    const QString moved = !folder.isEmpty()
+                              ? LibraryFiles::moveIntoFolder(source, folder, &error)
                               : LibraryFiles::moveIntoLibrary(source, m_downloadsDirectory, m_settings.libraryFolder(), &error);
     if (moved.isEmpty()) {
         m_downloads->setNote(downloadId, tr("Not added to the library: %1").arg(error));

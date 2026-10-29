@@ -37,30 +37,42 @@ Item {
         anchors.fill: parent
         spacing: 12
 
-        // The number one of each list; same click targets as the lists below.
+        // The number one of each list as picture tiles (same click targets as the lists below).
         RowLayout {
+            id: highlights
+
+            // Album and track are squares of this size and the artist takes the rest of the width.
+            // In a narrow window everything shrinks so the artist keeps at least 1.2 squares.
+            readonly property real tileHeight: Math.max(100, Math.min(380, (parent.width - 2 * 12) / 3.2))
+
             Layout.fillWidth: true
+            Layout.preferredHeight: tileHeight
+            Layout.maximumHeight: tileHeight
             spacing: 12
 
             TopHighlight {
-                label: qsTr("Top track")
-                entry: StatsController.topTrack
-                detail: page.highlightDetail(entry)
-                onClicked: ApplicationWindow.window.showAlbumOf(entry.url, true)
-            }
-
-            TopHighlight {
                 label: qsTr("Top artist")
+                tileHeight: highlights.tileHeight
                 entry: StatsController.topArtist
                 detail: page.highlightDetail(entry)
+                stretch: true
                 onClicked: ApplicationWindow.window.showArtist(entry.title)
             }
 
             TopHighlight {
                 label: qsTr("Top album")
+                tileHeight: highlights.tileHeight
                 entry: StatsController.topAlbum
                 detail: page.highlightDetail(entry)
                 onClicked: ApplicationWindow.window.showAlbumOf(entry.url, false)
+            }
+
+            TopHighlight {
+                label: qsTr("Top track")
+                tileHeight: highlights.tileHeight
+                entry: StatsController.topTrack
+                detail: page.highlightDetail(entry)
+                onClicked: ApplicationWindow.window.showAlbumOf(entry.url, true)
             }
         }
 

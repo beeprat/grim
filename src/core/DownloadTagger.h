@@ -39,6 +39,12 @@ struct AlbumMatch
 // found for a download without an album tag.
 AlbumMatch findAlbum(const Track &download, const QList<Track> &library);
 
+// Where a download goes when its album is not in the library yet: <library>/<Artist>/<Album>, reusing
+// an existing artist folder (same artistKey) and album folder inside it (same albumKey, ignoring a
+// "3. " number in front and a " (1971)" year after). Without an album tag: <library>/<Artist>. Empty
+// without an artist tag. Names are made safe for any file system.
+QString libraryFolderFor(const QString &library, const QString &artist, const QString &album);
+
 // The cover most of these files have (embedded, or a cover file next to them). Empty if none has one.
 QByteArray majorityCover(const QStringList &paths);
 

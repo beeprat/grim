@@ -13,6 +13,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSaveFile>
+#include <QRegularExpression>
 #include <QUrlQuery>
 #include <QtLogging>
 
@@ -39,6 +40,7 @@ ArtistImageFetcher::ArtistImageFetcher(const QString &cacheDirectory, QObject *p
     , m_network(new QNetworkAccessManager(this))
     , m_directory(cacheDirectory)
     , m_baseUrl(u"https://api.deezer.com"_s)
+    , m_youTubeMusicUrl(u"https://music.youtube.com"_s)
 {
     QDir().mkpath(m_directory);
 }
@@ -46,6 +48,11 @@ ArtistImageFetcher::ArtistImageFetcher(const QString &cacheDirectory, QObject *p
 void ArtistImageFetcher::setBaseUrl(const QUrl &baseUrl)
 {
     m_baseUrl = baseUrl;
+}
+
+void ArtistImageFetcher::setYouTubeMusicUrl(const QUrl &url)
+{
+    m_youTubeMusicUrl = url;
 }
 
 QString ArtistImageFetcher::cacheBase(const QString &artist) const
@@ -68,6 +75,105 @@ QUrl ArtistImageFetcher::cached(const QString &artist, bool *known) const
 }
 
 void ArtistImageFetcher::fetch(const QString &artist, std::function<void(const QUrl &)> onResult)
+{
+    if (m_youTubeMusicUrl.isEmpty())
+        fetchDeezer(artist, std::move(onResult));
+    else
+        fetchYouTubeMusic(artist, std::move(onResult));
+}
+
+QNetworkReply *ArtistImageFetcher::postYouTubeMusic(const QString &endpoint, QJsonObject body)
+{
+    body.insert("context"_L1, QJsonObject{{"client"_L1, QJsonObject{{"clientName"_L1, "WEB_REMIX"_L1},
+                                                                     {"clientVersion"_L1, "1.20241023.01.00"_L1},
+                                                                     {"hl"_L1, "en"_L1}}}});
+    QUrl url = m_youTubeMusicUrl.resolved(QUrl(u"/youtubei/v1/"_s + endpoint));
+    url.setQuery(u"prettyPrint=false"_s);
+    QNetworkRequest request = requestFor(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QByteArray("application/json"));
+    request.setRawHeader("Origin", m_youTubeMusicUrl.toString(QUrl::RemovePath).toUtf8());
+    return m_network->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+}
+
+// Search (artists only), take the exact name or else the first hit, then read the banner of
+// its page. Anything missing on the way falls back to Deezer.
+void ArtistImageFetcher::fetchYouTubeMusic(const QString &artist, std::function<void(const QUrl &)> onResult)
+{
+    QNetworkReply *reply = postYouTubeMusic(u"search"_s, {{"query"_L1, artist},
+                                                          {"params"_L1, "EgWKAQIgAWoKEAkQChAFEAMQBA=="_L1}});
+    connect(reply, &QNetworkReply::finished, this, [this, reply, artist, onResult = std::move(onResult)]() mutable {
+        reply->deleteLater();
+        const QJsonDocument answer = QJsonDocument::fromJson(reply->readAll());
+        QString first;
+        QString exact;
+        // The result rows sit deep in tabs and shelves; walk the whole answer for them.
+        std::function<void(const QJsonValue &)> walk = [&](const QJsonValue &value) {
+            if (!exact.isEmpty())
+                return;
+            if (value.isArray()) {
+                for (const QJsonValue &item : value.toArray())
+                    walk(item);
+                return;
+            }
+            const QJsonObject object = value.toObject();
+            const QJsonObject row = object.value("musicResponsiveListItemRenderer"_L1).toObject();
+            if (!row.isEmpty()) {
+                const QString id = row.value("navigationEndpoint"_L1).toObject().value("browseEndpoint"_L1)
+                                       .toObject().value("browseId"_L1).toString();
+                const QString name = row.value("flexColumns"_L1).toArray().first().toObject()
+                                         .value("musicResponsiveListItemFlexColumnRenderer"_L1).toObject()
+                                         .value("text"_L1).toObject().value("runs"_L1).toArray().first()
+                                         .toObject().value("text"_L1).toString();
+                if (id.startsWith("UC"_L1)) {
+                    if (first.isEmpty())
+                        first = id;
+                    if (name.compare(artist, Qt::CaseInsensitive) == 0)
+                        exact = id;
+                }
+                return;
+            }
+            for (const QJsonValue &child : object)
+                walk(child);
+        };
+        walk(answer.object());
+        const QString id = exact.isEmpty() ? first : exact;
+        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200 || id.isEmpty()) {
+            fetchDeezer(artist, std::move(onResult));
+            return;
+        }
+
+        QNetworkReply *page = postYouTubeMusic(u"browse"_s, {{"browseId"_L1, id}});
+        connect(page, &QNetworkReply::finished, this, [this, page, artist, onResult = std::move(onResult)]() mutable {
+            page->deleteLater();
+            const QJsonObject header = QJsonDocument::fromJson(page->readAll()).object().value("header"_L1).toObject();
+            // The header's kind varies (immersive banner, or a square visual header).
+            QJsonArray thumbnails;
+            for (const QJsonValue &kind : header)
+                thumbnails = kind.toObject().value("thumbnail"_L1).toObject().value("musicThumbnailRenderer"_L1)
+                                 .toObject().value("thumbnail"_L1).toObject().value("thumbnails"_L1).toArray();
+            QString picture = thumbnails.isEmpty() ? QString() : thumbnails.last().toObject().value("url"_L1).toString();
+            if (picture.isEmpty()) {
+                fetchDeezer(artist, std::move(onResult));
+                return;
+            }
+            // Ask for twice the listed size ("=w1080-h450-..." gets "=w2160-h900-...").
+            static const QRegularExpression size(u"=w(\\d+)-h(\\d+)"_s);
+            const QRegularExpressionMatch match = size.match(picture);
+            if (match.hasMatch()) {
+                picture.replace(match.capturedStart(), match.capturedLength(),
+                                u"=w%1-h%2"_s.arg(match.captured(1).toInt() * 2).arg(match.captured(2).toInt() * 2));
+            }
+            download(artist, QUrl(picture), [this, artist, onResult = std::move(onResult)](const QUrl &file) mutable {
+                if (file.isEmpty())
+                    fetchDeezer(artist, std::move(onResult));
+                else
+                    onResult(file);
+            });
+        });
+    });
+}
+
+void ArtistImageFetcher::fetchDeezer(const QString &artist, std::function<void(const QUrl &)> onResult)
 {
     QUrl url = m_baseUrl.resolved(QUrl(u"/search/artist"_s));
     url.setQuery(QUrlQuery{{u"q"_s, artist}, {u"limit"_s, u"10"_s}});
@@ -92,7 +198,9 @@ void ArtistImageFetcher::fetch(const QString &artist, std::function<void(const Q
             exact = true;
         }
         // Artists without a photo get a generic one whose path has an empty image id ("artist//").
-        const QString picture = best.value("picture_big"_L1).toString();
+        QString picture = best.value("picture_xl"_L1).toString();
+        if (picture.isEmpty())
+            picture = best.value("picture_big"_L1).toString();
         if (picture.isEmpty() || picture.contains("/artist//"_L1)) {
             // An empty marker file; if it cannot be written, the lookup simply repeats next time.
             QFile none(cacheBase(artist) + u".none"_s);

@@ -58,6 +58,7 @@ private slots:
         QTemporaryDir cache;
         ArtistImageFetcher fetcher(cache.path());
         fetcher.setBaseUrl(server.url());
+        fetcher.setYouTubeMusicUrl({});
 
         std::optional<QUrl> result;
         fetcher.fetch(u"Alice in Chains"_s, [&](const QUrl &file) { result = file; });
@@ -83,6 +84,7 @@ private slots:
         QTemporaryDir cache;
         ArtistImageFetcher fetcher(cache.path());
         fetcher.setBaseUrl(server.url());
+        fetcher.setYouTubeMusicUrl({});
 
         std::optional<QUrl> result;
         fetcher.fetch(u"Nobody"_s, [&](const QUrl &file) { result = file; });
@@ -102,6 +104,7 @@ private slots:
         QTemporaryDir cache;
         ArtistImageFetcher fetcher(cache.path());
         fetcher.setBaseUrl(server.url());
+        fetcher.setYouTubeMusicUrl({});
 
         std::optional<QUrl> result;
         fetcher.fetch(u"Camel"_s, [&](const QUrl &file) { result = file; });

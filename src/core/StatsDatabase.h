@@ -62,14 +62,21 @@ public:
     QList<TrackStat> topTracks(int limit) const;
     QList<ArtistStat> topArtists(int limit) const;
     QList<AlbumStat> topAlbums(int limit) const;
+    // One artist's totals, name matched ignoring case.
+    ArtistStat artistStat(const QString &artist) const;
 
-    // Whole listening history as JSON: {"format": "grim-stats", "version": 1, "plays": [{path, title,
-    // artist, album, durationMs, startedAt (epoch s), listenedMs, counted}]}. Empty on failure.
-    QByteArray exportJson() const;
-    // Adds the plays of an exportJson() file. A play already here (same file path and start time) is
-    // skipped, so importing the same file twice changes nothing. All or nothing: on any error nothing
-    // is added. Returns the number of plays added, or -1 if the file is not a valid export.
-    int importJson(const QByteArray &json);
+    // Whole listening history as JSON: {"format": "grim-stats", "version": 2, "plays": [{path, file,
+    // title, artist, album, durationMs, startedAt (epoch s), listenedMs, counted}]}. "file" is the
+    // path inside libraryFolder with "/" (absent for files outside it), so an export from one
+    // computer or system imports on another whose music folder is elsewhere. Empty on failure.
+    QByteArray exportJson(const QString &libraryFolder = {}) const;
+    // Adds the plays of an exportJson() file (version 1 or 2). Each play's file is found as "file"
+    // under libraryFolder, else as the end of "path" that exists under libraryFolder (so version 1
+    // exports from Windows match on Linux), else "path" as is. A play already here (same file and
+    // start time) is skipped, so importing the same file twice changes nothing. All or nothing: on
+    // any error nothing is added. Returns the number of plays added, or -1 if the file is not a
+    // valid export.
+    int importJson(const QByteArray &json, const QString &libraryFolder = {});
 
     // A play is 30 seconds of listening (streaming-service rule); a track shorter
     // than a minute counts after half of it.

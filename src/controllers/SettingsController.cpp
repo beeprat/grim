@@ -91,7 +91,7 @@ namespace {
 QStringList cacheFolders()
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    return {base + QStringLiteral("/covers"), base + QStringLiteral("/artists"), base + QStringLiteral("/lyrics")};
+    return {base + QStringLiteral("/covers"), base + QStringLiteral("/artist-photos"), base + QStringLiteral("/lyrics")};
 }
 
 } // namespace
@@ -126,7 +126,10 @@ void SettingsController::clearCache()
 QString SettingsController::importBackground(const QUrl &imageUrl)
 {
     const QString source = imageUrl.toLocalFile();
-    if (!source.isEmpty() && QImageReader(source).format().isEmpty())
+    // Videos (played by the background) are taken as they are; pictures must be readable.
+    const QString suffix = QFileInfo(source).suffix().toLower();
+    const bool video = suffix == "webm"_L1 || suffix == "mp4"_L1;
+    if (!source.isEmpty() && !video && QImageReader(source).format().isEmpty())
         return {}; // not a picture Qt can read: keep the current one
     const QDir data(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     const QString name = source.isEmpty() ? QString()

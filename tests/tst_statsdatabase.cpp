@@ -3,6 +3,9 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QTest>
 #include <QTimeZone>
 
@@ -190,6 +193,40 @@ private slots:
         QVERIFY(!db.recordPlay(makeTrack(u"a.flac"_s, u"A"_s), kStart, 0));
         QVERIFY(!db.recordPlay(makeTrack(u"a.flac"_s, u"A"_s), QDateTime(), 1'000));
         QCOMPARE(db.totals().listenedMs, 0);
+    }
+
+    void importsAcrossSystems()
+    {
+        // Exported on Windows with the music in C:/Users/x/Music; imported where it is elsewhere.
+        QTemporaryDir music;
+        const QString song = music.filePath(u"Camel/1. Mirage (1974)/Lady Fantasy.m4a"_s);
+        QVERIFY(QDir().mkpath(QFileInfo(song).path()));
+        QFile file(song);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.close();
+
+        StatsDatabase source;
+        QVERIFY(source.open(u":memory:"_s));
+        QVERIFY(source.recordPlay(makeTrack(u"C:/Users/x/Music/Camel/1. Mirage (1974)/Lady Fantasy.m4a"_s, u"Camel"_s),
+                                  kStart, 60'000));
+        const QByteArray json = source.exportJson(u"C:/Users/x/Music"_s);
+        QVERIFY(json.contains("\"file\": \"Camel/1. Mirage (1974)/Lady Fantasy.m4a\""));
+
+        StatsDatabase target;
+        QVERIFY(target.open(u":memory:"_s));
+        QCOMPARE(target.importJson(json, music.path()), 1);
+        QCOMPARE(target.topTracks(1).first().track.path, QDir::cleanPath(song));
+
+        // A version 1 export (no "file", Windows path) finds the same file by the end of its path.
+        QByteArray v1 = json;
+        v1.replace("\"version\": 2", "\"version\": 1");
+        v1.replace("\"file\": \"Camel/1. Mirage (1974)/Lady Fantasy.m4a\",", "");
+        v1.replace("C:/Users/x/Music", "C:\\\\Users\\\\x\\\\Music");
+        QVERIFY(!v1.contains("\"file\"") && v1.contains("\"version\": 1") && v1.contains("\\\\Users"));
+        StatsDatabase old;
+        QVERIFY(old.open(u":memory:"_s));
+        QCOMPARE(old.importJson(v1, music.path()), 1);
+        QCOMPARE(old.topTracks(1).first().track.path, QDir::cleanPath(song));
     }
 
     void exportsAndImportsWithoutDuplicates()

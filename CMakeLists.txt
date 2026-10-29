@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(MusicPlayer VERSION 0.2.2 LANGUAGES C CXX)
+project(MusicPlayer VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,6 +14,11 @@ if(NOT WIN32)
     find_package(PkgConfig REQUIRED)
     # Order matters for the static FFmpeg CI builds: each library before the ones it uses.
     pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libswresample libavutil)
+    # A static FFmpeg (the AppImage CI) also needs the libraries it uses itself, such as dav1d.
+    option(GRIM_STATIC_FFMPEG "FFmpeg is linked statically" OFF)
+    if(GRIM_STATIC_FFMPEG)
+        target_link_libraries(PkgConfig::FFMPEG INTERFACE ${FFMPEG_STATIC_LDFLAGS})
+    endif()
     find_package(Threads REQUIRED)
 endif()
 qt_standard_project_setup(REQUIRES 6.8)
@@ -104,11 +109,19 @@ add_library(musicplayer_core STATIC
     src/core/DownloadTagger.h
     src/core/DownloadTagger.cpp
     src/core/CredentialStore.cpp
+    src/core/WallpaperBlur.h
+    src/core/WallpaperBlur.cpp
+    src/core/PhoneSync.h
+    src/core/PhoneSync.cpp
+    src/core/TagEditor.h
+    src/core/TagEditor.cpp
     src/audio/AudioEngine.h
     src/audio/AudioEngine.cpp
     src/audio/AacSource.h
     src/audio/Reverb.h
     src/audio/Reverb.cpp
+    src/audio/Equalizer.h
+    src/audio/Equalizer.cpp
 )
 target_include_directories(musicplayer_core PUBLIC src)
 # windows.h (pulled in by Media Foundation) otherwise defines min/max macros.
@@ -133,6 +146,8 @@ qt_add_executable(MusicPlayer WIN32
     src/controllers/TrayController.cpp
     src/providers/CoverImageProvider.h
     src/providers/CoverImageProvider.cpp
+    src/providers/WallpaperImageProvider.h
+    src/providers/WallpaperImageProvider.cpp
 )
 if(WIN32)
     target_sources(MusicPlayer PRIVATE
@@ -158,6 +173,10 @@ qt_add_qml_module(MusicPlayer
     URI MusicPlayer
     VERSION 1.0
     SOURCES
+        src/providers/WallpaperVideo.h
+        src/providers/WallpaperVideo.cpp
+        src/controllers/PhoneSyncController.h
+        src/controllers/PhoneSyncController.cpp
         src/controllers/LibraryController.h
         src/controllers/LibraryController.cpp
         src/controllers/PlayerController.h
@@ -232,6 +251,7 @@ qt_add_qml_module(MusicPlayer
         qml/icons/add.svg
         qml/icons/search.svg
         qml/icons/refresh.svg
+        qml/icons/restart.svg
         qml/icons/tune.svg
         qml/icons/dashboard.svg
         qml/icons/library.svg
@@ -290,6 +310,13 @@ if(MSVC)
 endif()
 # The generated QML type registration includes these headers by bare file name.
 target_include_directories(MusicPlayer PRIVATE src/controllers src/providers)
+# Background videos: Qt Multimedia on Windows, FFmpeg (already used for AAC) elsewhere.
+if(WIN32)
+    find_package(Qt6 REQUIRED COMPONENTS Multimedia)
+    target_link_libraries(MusicPlayer PRIVATE Qt6::Multimedia)
+else()
+    target_link_libraries(MusicPlayer PRIVATE PkgConfig::FFMPEG)
+endif()
 # Shipped as GRIM.exe; the target, QML module and data folders keep the MusicPlayer name.
 set_target_properties(MusicPlayer PROPERTIES OUTPUT_NAME GRIM)
 
@@ -306,6 +333,18 @@ if(WIN32)
 endif()
 
 enable_testing()
+
+qt_add_executable(tst_equalizer tests/tst_equalizer.cpp)
+target_link_libraries(tst_equalizer PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_equalizer COMMAND tst_equalizer)
+
+qt_add_executable(tst_tageditor tests/tst_tageditor.cpp)
+target_link_libraries(tst_tageditor PRIVATE musicplayer_core Qt6::Gui Qt6::Test musicplayer_warnings)
+add_test(NAME tst_tageditor COMMAND tst_tageditor)
+
+qt_add_executable(tst_phonesync tests/tst_phonesync.cpp)
+target_link_libraries(tst_phonesync PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_phonesync COMMAND tst_phonesync)
 
 qt_add_executable(tst_statsdatabase tests/tst_statsdatabase.cpp)
 target_link_libraries(tst_statsdatabase PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)

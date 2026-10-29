@@ -22,16 +22,17 @@ jobs:
             libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 libfontconfig1-dev libfreetype6-dev \
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libdbus-1-3 libpulse0 libasound2 \
-            nasm ffmpeg # the ffmpeg program: download conversion tests only
+            nasm libdav1d-dev ffmpeg # the ffmpeg program: download conversion tests only
 
-      # A minimal static FFmpeg linked into GRIM: only what M4A/AAC/ALAC playback needs. Ubuntu's shared FFmpeg
-      # pulled ~60 video/network libraries (and a second ICU) into the AppImage.
+      # A minimal static FFmpeg linked into GRIM: what M4A/AAC/ALAC playback and video backgrounds (webm/mp4:
+      # VP8, VP9, H.264, AV1 through dav1d) need. Ubuntu's shared FFmpeg pulled ~60 video/network libraries (and a
+      # second ICU) into the AppImage.
       - name: Cache FFmpeg
         id: ffmpeg-cache
         uses: actions/cache@v4
         with:
           path: ~/ffmpeg
-          key: ffmpeg-7.1.2-audio-v1
+          key: ffmpeg-7.1.2-av-v2
 
       - name: Build FFmpeg
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
@@ -42,8 +43,9 @@ jobs:
           ./configure --prefix="$HOME/ffmpeg" --cc=gcc-12 --enable-static --disable-shared --enable-pic \
             --disable-autodetect --disable-everything --disable-programs --disable-doc --disable-network \
             --disable-avdevice --disable-avfilter --disable-swscale \
-            --enable-protocol=file --enable-demuxer=mov,aac --enable-parser=aac \
-            --enable-decoder=aac,aac_fixed,aac_latm,alac --enable-swresample
+            --enable-protocol=file --enable-demuxer=mov,aac,matroska --enable-parser=aac,vp8,vp9,h264,av1 \
+            --enable-decoder=aac,aac_fixed,aac_latm,alac,vp8,vp9,h264,libdav1d --enable-bsf=vp9_superframe_split \
+            --enable-libdav1d --enable-swresample
           make -j"$(nproc)" install
 
       - name: Install Qt
@@ -59,7 +61,7 @@ jobs:
         run: |
           export PKG_CONFIG_PATH="$HOME/ffmpeg/lib/pkgconfig"
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER=gcc-12 \
-            -DCMAKE_INSTALL_PREFIX=/usr
+            -DCMAKE_INSTALL_PREFIX=/usr -DGRIM_STATIC_FFMPEG=ON
           cmake --build build -- -k 0
 
       - name: Test

@@ -307,6 +307,25 @@ void PlayerController::setReverb(double amount)
     emit effectsChanged();
 }
 
+QList<double> PlayerController::equalizer() const
+{
+    return m_equalizer;
+}
+
+void PlayerController::setEqualizer(const QList<double> &gainsDb)
+{
+    QList<double> gains = gainsDb;
+    gains.resize(16, 0.0);
+    if (gains == m_equalizer)
+        return;
+    m_equalizer = gains;
+    std::array<float, 16> bands{};
+    for (int band = 0; band < 16; ++band)
+        bands[band] = float(gains[band]);
+    m_engine.setEqualizer(bands);
+    emit effectsChanged();
+}
+
 bool PlayerController::lyricsShown() const
 {
     return m_lyricsShown;

@@ -28,7 +28,7 @@ Rectangle {
         nameFilters: [qsTr("grim. statistics (*.json)")]
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         onAccepted: {
-            const error = StatsController.exportTo(selectedFile)
+            const error = StatsController.exportTo(selectedFile, SettingsController.libraryFolder)
             bar.showNote(error !== "" ? error : qsTr("Statistics exported"))
         }
     }
@@ -39,7 +39,7 @@ Rectangle {
         title: qsTr("Import statistics")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("grim. statistics (*.json)")]
-        onAccepted: bar.showNote(StatsController.importFrom(selectedFile))
+        onAccepted: bar.showNote(StatsController.importFrom(selectedFile, SettingsController.libraryFolder))
     }
 
     Timer {

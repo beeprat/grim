@@ -99,12 +99,14 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - `stats.sqlite` (`core/StatsDatabase`): schema version in `PRAGMA user_version`; `migrate()` has one step list per
   version. To change it, bump `kSchemaVersion` and append a step; never edit a shipped step. `listened_ms` is
   wall-clock playing time; `counted` = 30 s, or half of a track under a minute. Sessions under 1 s are not stored.
-  Export/import JSON `format: grim-stats` v1; import skips plays with the same path + start time.
+  Export/import JSON `format: grim-stats` v2 (v1 still imports): each play also has `file`, its path inside the
+  music folder, so exports move between systems; v1 paths are matched by their tail. Import skips plays with the
+  same path + start time.
 - `library.sqlite` (`core/LibraryDatabase`): ratings, favorites, per-song volume adjustment in dB
   (`replaygain_db`, NULL = none; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
   the built-in Favorites list. Older builds refuse a newer schema (no ratings shown) rather than downgrade it.
 - `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
-- `cache/covers` (`core/CoverCache`: one JPEG (q80) per cover picture + size, `refs/<sha1 of path+mtime+size>` names the picture; `.none` = no cover; a folder without `refs/` has old per-track thumbnails, deleted on start), `cache/artists` (Deezer photos),
+- `cache/covers` (`core/CoverCache`: one JPEG (q80) per cover picture + size, `refs/<sha1 of path+mtime+size>` names the picture; `.none` = no cover; a folder without `refs/` has old per-track thumbnails, deleted on start), `cache/artist-photos` (YouTube Music header banners via its web API, Deezer as fallback; the old square `cache/artists` is deleted on start),
   `cache/lyrics` (LRCLIB; `.none` retried after 7 days). Network failures are never cached. Safe to delete.
 - Key files (`core/KeyFile`, `key = value`, `#` comments): `lastfm.txt` (`api_key`, `shared_secret`), `discord.txt`
   (`application_id`, `imgur_client_id`; empty values fall back to `kDefaultApplicationId`/`kDefaultImgurClientId`).
@@ -124,6 +126,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Engine volume = user slider; per-sound volume is the song's own dB value (right-click → "Volume adjustment…",
   dialog in `Main.qml`, ±20 dB, `core/ReplayGain::fromDb`), 1 without one. ReplayGain tags are not applied (removed
   on request); the dialog only shows the tag as a hint. A gapless track gets its gain when queued; `LibraryController::metaChanged` reapplies it.
+- Equalizer (`audio/Equalizer`): 16 peaking biquads, 31 Hz–16 kHz 0.6 octave apart, ±12 dB, always on, first in
+  `EffectsNode` (before the reverb). No preamp: while a band is boosted, peaks above 0.8 are soft-limited (tanh).
+  Gains stored as JSON text in `effects/equalizerGains`.
 - Effects: only in the popup by the volume, and applied only while Settings → Effects → "Show effects button" is
   on (`Effects.showInNowPlaying`). Speed (0.5–1.5, pitch follows) = `ma_sound_set_pitch`; Reverb (Freeverb) in a custom
   `EffectsNode`, which also does Mono (Settings → Playback, `player/mono`: both channels = their average, after the
@@ -161,6 +166,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   most of those tracks are in, their most common artist / album name / year, and their most common cover, then moves
   there (`LibraryFiles::moveIntoFolder`); otherwise it goes in by its download folder as before. Library tracks come
   from `setLibraryTracks` (main.cpp).
+- A download whose album is not in the library goes to `<library>/<Artist>/<Album>` (`DownloadTagger::
+  libraryFolderFor`, existing folders reused by artist/album key, "3. Album (1971)" folders included).
 - Download conversion (`core/AudioConverter`): ffmpeg from PATH, writes `<name>.converting.<ext>` (skipped by scans),
   copies tags with TagLib, then renames. Original goes to the Recycle Bin.
 - Last.fm (`core/LastFmClient`): signature = md5 of sorted params (no `format`) + secret. Queue sent in batches of
@@ -184,6 +191,19 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   No signature check: the trust is the same as downloading from the repo by hand. Check failures are silent.
 
 ## UI
+- Background: `core/WallpaperBlur` blurs and darkens on the CPU (640 px wide when blurred) and Main.qml only
+  stretches the result: pictures via `image://wallpaper/<blur‰>/<url>`, videos (webm/mp4) via
+  `providers/WallpaperVideo` (FFmpeg + libdav1d on Linux, Qt Multimedia on Windows; paused while the window is
+  hidden). No GPU blur: it glitched on resize.
+- Edit info (track menu): `core/TagEditor` writes title, artist, album artist, album, genre, year, track number,
+  composer, label and the front cover; `LibraryController::writeTags` re-reads the files and bumps
+  `CoverImageProvider`'s URL revision so QML drops cached covers.
+- Library artist page: `artistFilter` set → photo header (`StatsController::artistImage`) with album count, plays
+  and time listened (`artistStats`). The rail's Library button is Back while an album or artist is open.
+- iPhone sync (Settings, Linux only, hidden until a code is typed; only its SHA-256 is in the source, unlocked
+  until grim closes): `core/PhoneSync` mirrors songs and `.lrc` into MiniMoon's Documents mounted with `ifuse
+  --documents com.plastaq.music1`. Names compared in NFC (iOS stores NFD); updated = size differs or the library
+  file is newer. MiniMoon lists new files after it is restarted.
 
 - `qml/Theme.qml` singleton: use `Theme.*`, never literal colors. Panels use `Theme.panel` (the card color, 72 %
   opaque when a background image is set); `Theme.card`/`Theme.window` stay opaque for popups and icon colors.

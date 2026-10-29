@@ -1,5 +1,8 @@
 #include "core/StatsDatabase.h"
 
+#include <QDir>
+#include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -266,6 +269,22 @@ QList<ArtistStat> StatsDatabase::topArtists(int limit) const
     return result;
 }
 
+ArtistStat StatsDatabase::artistStat(const QString &artist) const
+{
+    QSqlQuery query(database());
+    query.prepare(uR"(SELECT SUM(p.counted), SUM(p.listened_ms)
+                      FROM plays p JOIN tracks t ON t.id = p.track_id
+                      WHERE t.artist = ? COLLATE NOCASE)"_s);
+    query.addBindValue(artist);
+    if (!query.exec()) {
+        logFailure(query);
+        return {artist, 0, 0};
+    }
+    if (!query.next())
+        return {artist, 0, 0};
+    return {artist, query.value(0).toLongLong(), query.value(1).toLongLong()};
+}
+
 QList<AlbumStat> StatsDatabase::topAlbums(int limit) const
 {
     // An album is its name plus artist: two artists' "Greatest Hits" are two albums.
@@ -290,8 +309,49 @@ QList<AlbumStat> StatsDatabase::topAlbums(int limit) const
     return result;
 }
 
-QByteArray StatsDatabase::exportJson() const
+namespace {
+
+// "C:\\Music\\A\\b.mp3" or "/home/x/Music/A/b.mp3" → its path parts.
+QStringList pathParts(const QString &path)
 {
+    return QString(path).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts);
+}
+
+// Where an exported play's file is on this computer (see importJson).
+QString resolveImported(const QJsonObject &play, const QString &libraryFolder, QHash<QString, QString> &cache)
+{
+    const QString path = play.value("path"_L1).toString();
+    if (libraryFolder.isEmpty())
+        return path;
+    const QDir library(libraryFolder);
+    const QString file = play.value("file"_L1).toString();
+    if (!file.isEmpty())
+        return QDir::cleanPath(library.filePath(file));
+    if (QFileInfo::exists(path))
+        return path;
+    const auto known = cache.constFind(path);
+    if (known != cache.cend())
+        return known.value();
+    // Drop leading folders until the rest exists in the library ("C:/Users/x/Music/A/b.mp3" →
+    // "A/b.mp3"); at least the folder and file name must match.
+    QString found = path;
+    const QStringList parts = pathParts(path);
+    for (qsizetype first = 0; first + 2 <= parts.size(); ++first) {
+        const QString candidate = library.filePath(parts.mid(first).join(u'/'));
+        if (QFileInfo::exists(candidate)) {
+            found = QDir::cleanPath(candidate);
+            break;
+        }
+    }
+    cache.insert(path, found);
+    return found;
+}
+
+} // namespace
+
+QByteArray StatsDatabase::exportJson(const QString &libraryFolder) const
+{
+    const QString library = libraryFolder.isEmpty() ? QString() : QDir::cleanPath(libraryFolder) + u'/';
     QSqlQuery query(database());
     if (!query.exec(uR"(SELECT t.path, t.title, t.artist, t.album, t.duration_ms,
                                p.started_at, p.listened_ms, p.counted
@@ -302,8 +362,9 @@ QByteArray StatsDatabase::exportJson() const
     }
     QJsonArray plays;
     while (query.next()) {
-        plays.append(QJsonObject{
-            {u"path"_s, query.value(0).toString()},
+        const QString path = query.value(0).toString();
+        QJsonObject play{
+            {u"path"_s, path},
             {u"title"_s, query.value(1).toString()},
             {u"artist"_s, query.value(2).toString()},
             {u"album"_s, query.value(3).toString()},
@@ -311,19 +372,25 @@ QByteArray StatsDatabase::exportJson() const
             {u"startedAt"_s, query.value(5).toLongLong()},
             {u"listenedMs"_s, query.value(6).toLongLong()},
             {u"counted"_s, query.value(7).toInt() == 1},
-        });
+        };
+        const QString clean = QDir::cleanPath(QString(path).replace(u'\\', u'/'));
+        if (!library.isEmpty() && clean.startsWith(library, Qt::CaseInsensitive))
+            play.insert(u"file"_s, clean.mid(library.size()));
+        plays.append(play);
     }
-    return QJsonDocument(QJsonObject{{u"format"_s, u"grim-stats"_s}, {u"version"_s, 1}, {u"plays"_s, plays}})
+    return QJsonDocument(QJsonObject{{u"format"_s, u"grim-stats"_s}, {u"version"_s, 2}, {u"plays"_s, plays}})
         .toJson(QJsonDocument::Indented);
 }
 
-int StatsDatabase::importJson(const QByteArray &json)
+int StatsDatabase::importJson(const QByteArray &json, const QString &libraryFolder)
 {
     const QJsonObject root = QJsonDocument::fromJson(json).object();
-    if (root.value("format"_L1).toString() != "grim-stats"_L1 || root.value("version"_L1).toInt() != 1
+    const int version = root.value("version"_L1).toInt();
+    if (root.value("format"_L1).toString() != "grim-stats"_L1 || version < 1 || version > 2
         || !root.value("plays"_L1).isArray())
         return -1;
     const QJsonArray plays = root.value("plays"_L1).toArray();
+    QHash<QString, QString> resolved; // exported path → file here
 
     QSqlDatabase db = database();
     if (!db.transaction()) {
@@ -350,7 +417,7 @@ int StatsDatabase::importJson(const QByteArray &json)
     int added = 0;
     for (const QJsonValue &value : plays) {
         const QJsonObject play = value.toObject();
-        const QString path = play.value("path"_L1).toString();
+        const QString path = resolveImported(play, libraryFolder, resolved);
         const qint64 startedAt = play.value("startedAt"_L1).toInteger();
         const qint64 listenedMs = play.value("listenedMs"_L1).toInteger();
         if (path.isEmpty() || listenedMs <= 0) {
