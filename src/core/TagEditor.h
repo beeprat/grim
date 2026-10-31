@@ -5,7 +5,7 @@
 #include <QVariantMap>
 
 // Reads and writes the tags people edit by hand (right-click → "Edit info…"): title, artist,
-// album artist, album, genre, year, track number, composer, label and the front cover.
+// album artist, album, genre, year, track number, disc number, composer, label and the front cover.
 namespace TagEditor {
 
 // Keys for read() and write().
@@ -16,6 +16,7 @@ inline constexpr auto kAlbum = "album";
 inline constexpr auto kGenre = "genre";
 inline constexpr auto kYear = "year";
 inline constexpr auto kTrack = "track";
+inline constexpr auto kDisc = "disc";
 inline constexpr auto kComposer = "composer";
 inline constexpr auto kLabel = "label";
 

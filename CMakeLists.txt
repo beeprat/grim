@@ -175,6 +175,8 @@ qt_add_qml_module(MusicPlayer
     SOURCES
         src/providers/WallpaperVideo.h
         src/providers/WallpaperVideo.cpp
+        src/controllers/WindowFrame.h
+        src/controllers/WindowFrame.cpp
         src/controllers/PhoneSyncController.h
         src/controllers/PhoneSyncController.cpp
         src/controllers/LibraryController.h
@@ -252,6 +254,11 @@ qt_add_qml_module(MusicPlayer
         qml/icons/search.svg
         qml/icons/refresh.svg
         qml/icons/restart.svg
+        qml/icons/download.svg
+        qml/icons/upload.svg
+        qml/icons/delete.svg
+        qml/icons/edit.svg
+        qml/icons/save.svg
         qml/icons/tune.svg
         qml/icons/dashboard.svg
         qml/icons/library.svg

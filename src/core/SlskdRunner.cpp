@@ -210,6 +210,12 @@ void SlskdRunner::start(const QString &username, const QString &password, const 
     launch();
 }
 
+void SlskdRunner::setWebLogin(const QString &username, const QString &password)
+{
+    m_webUsername = username;
+    m_webPassword = password;
+}
+
 void SlskdRunner::launch()
 {
     if (!QFile::exists(executable())) {
@@ -231,7 +237,15 @@ void SlskdRunner::launch()
     env.insert(u"SLSKD_SLSK_PASSWORD"_s, m_password);
     env.insert(u"SLSKD_NO_LOGO"_s, u"true"_s);
     env.insert(u"SLSKD_NO_VERSION_CHECK"_s, u"true"_s); // grim. pins the version
-    env.insert(u"SLSKD_HEADLESS"_s, u"true"_s);
+    if (m_webUsername.isEmpty()) {
+        env.insert(u"SLSKD_HEADLESS"_s, u"true"_s);
+    } else {
+        // The web page (its files are in the install folder's wwwroot), with its own login.
+        env.insert(u"SLSKD_USERNAME"_s, m_webUsername);
+        env.insert(u"SLSKD_PASSWORD"_s, m_webPassword);
+        // Its settings can be edited there (saved to slskd.yml); the values set here still win at start.
+        env.insert(u"SLSKD_REMOTE_CONFIGURATION"_s, u"true"_s);
+    }
     m_process->setProcessEnvironment(env);
     m_process->setProgram(executable());
     m_process->setArguments({u"--app-dir"_s, QDir::toNativeSeparators(dataDirectory())});

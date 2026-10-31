@@ -21,7 +21,7 @@ struct Field
 constexpr Field kFields[] = {
     {TagEditor::kTitle, "TITLE"},     {TagEditor::kArtist, "ARTIST"}, {TagEditor::kAlbumArtist, "ALBUMARTIST"},
     {TagEditor::kAlbum, "ALBUM"},     {TagEditor::kGenre, "GENRE"},   {TagEditor::kYear, "DATE"},
-    {TagEditor::kTrack, "TRACKNUMBER"}, {TagEditor::kComposer, "COMPOSER"}, {TagEditor::kLabel, "LABEL"},
+    {TagEditor::kTrack, "TRACKNUMBER"}, {TagEditor::kDisc, "DISCNUMBER"}, {TagEditor::kComposer, "COMPOSER"}, {TagEditor::kLabel, "LABEL"},
 };
 
 TagLib::String toTagLib(const QString &value)
@@ -46,7 +46,7 @@ QVariantMap TagEditor::read(const QString &path)
     for (const Field &field : kFields) {
         const auto it = properties.find(field.property);
         QString value = it == properties.end() || it->second.isEmpty() ? QString() : toQString(it->second.front());
-        if (std::string_view(field.key) == kTrack)
+        if (std::string_view(field.key) == kTrack || std::string_view(field.key) == kDisc)
             value = value.section(u'/', 0, 0); // "3/12" → "3"
         result.insert(QLatin1StringView(field.key), value);
     }

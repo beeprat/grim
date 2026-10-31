@@ -43,6 +43,9 @@ public:
     void install();
     // Starts (or restarts) slskd logged in as `username`. `apiKey`: 16..255 characters.
     void start(const QString &username, const QString &password, const QString &apiKey);
+    // slskd's own web page at serverUrl(), behind this login; an empty username keeps it off. Applies at
+    // the next start.
+    void setWebLogin(const QString &username, const QString &password);
     void stop();
 
     // Checks `zipPath` against `sha256Hex` and unpacks it into `destination` (replaced). Used by install();
@@ -68,6 +71,8 @@ private:
     QString m_username;
     QString m_password;
     QString m_apiKey;
+    QString m_webUsername;
+    QString m_webPassword;
     int m_retries = 0;
     void *m_job = nullptr; // Windows job object HANDLE
 };

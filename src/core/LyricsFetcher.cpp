@@ -11,6 +11,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
 #include <QUrlQuery>
 
 #include <cmath>
@@ -20,6 +21,9 @@ using namespace Qt::StringLiterals;
 namespace {
 
 constexpr int kTimeoutMs = 10'000;
+// Busy service: tries in all, the wait before the next one doubling from this.
+constexpr int kAttempts = 4;
+constexpr int kRetryDelayMs = 1500;
 constexpr qint64 kNotFoundRetrySecs = 7 * 24 * 60 * 60;
 // LRCLIB asks clients to identify themselves.
 constexpr auto kUserAgent = "GRIM/0.1 (Qt desktop music player)";
@@ -89,20 +93,14 @@ void LyricsFetcher::fetch(const Track &track, std::function<void(const QString &
     QUrl url = m_baseUrl.resolved(QUrl(u"/api/get"_s));
     url.setQuery(query);
 
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArray(kUserAgent));
-    request.setTransferTimeout(kTimeoutMs);
-    QNetworkReply *reply = m_network->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, track, onResult = std::move(onResult)] {
-        reply->deleteLater();
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    request(url, 1, [this, track, onResult = std::move(onResult)](int status, const QByteArray &body) {
         if (status == 200) {
-            const QString lyrics = lyricsOf(QJsonDocument::fromJson(reply->readAll()).object());
+            const QString lyrics = lyricsOf(QJsonDocument::fromJson(body).object());
             store(track, lyrics);
             onResult(lyrics);
             return;
         }
-        if (status == 0) { // no connection: try again next time
+        if (status == 0 || status == 429 || status >= 500) { // no connection or still busy: try again next time
             onResult({});
             return;
         }
@@ -119,18 +117,13 @@ void LyricsFetcher::search(const Track &track, std::function<void(const QString 
     QUrl url = m_baseUrl.resolved(QUrl(u"/api/search"_s));
     url.setQuery(query);
 
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArray(kUserAgent));
-    request.setTransferTimeout(kTimeoutMs);
-    QNetworkReply *reply = m_network->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, track, onResult = std::move(onResult)] {
-        reply->deleteLater();
-        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
+    request(url, 1, [this, track, onResult = std::move(onResult)](int status, const QByteArray &body) {
+        if (status != 200) {
             onResult({}); // service trouble: not cached, retried next time
             return;
         }
         // Prefer a synced version of about the same length, then any synced one, then plain text.
-        const QJsonArray results = QJsonDocument::fromJson(reply->readAll()).array();
+        const QJsonArray results = QJsonDocument::fromJson(body).array();
         const double seconds = track.durationMs / 1000.0;
         QString best;
         int bestScore = 0;
@@ -149,5 +142,23 @@ void LyricsFetcher::search(const Track &track, std::function<void(const QString 
         }
         store(track, best);
         onResult(best);
+    });
+}
+
+void LyricsFetcher::request(const QUrl &url, int attempt, std::function<void(int, const QByteArray &)> onReply)
+{
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, QByteArray(kUserAgent));
+    request.setTransferTimeout(kTimeoutMs);
+    QNetworkReply *reply = m_network->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url, attempt, onReply = std::move(onReply)] {
+        reply->deleteLater();
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if ((status == 429 || status >= 500) && attempt < kAttempts) {
+            QTimer::singleShot(kRetryDelayMs << (attempt - 1), this,
+                               [this, url, attempt, onReply] { this->request(url, attempt + 1, onReply); });
+            return;
+        }
+        onReply(status, reply->readAll());
     });
 }

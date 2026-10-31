@@ -214,10 +214,12 @@ void DiscordController::schedule()
 {
     // Never restart a running timer: position ticks every 200 ms would postpone it forever.
     // publish() reads the state when it fires, so later changes in the window are included.
-    if (m_enabled && !m_debounce->isActive())
-        m_debounce->start();
-    else
+    // A change while it runs (dragging the seek bar, moving the speed slider) waits for it instead of
+    // clearing the presence.
+    if (!m_enabled)
         m_ipc->setActivity({});
+    else if (!m_debounce->isActive())
+        m_debounce->start();
 }
 
 void DiscordController::publish()

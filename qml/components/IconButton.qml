@@ -12,7 +12,7 @@ ToolButton {
     property int iconSize: 20
 
     display: AbstractButton.IconOnly
-    icon.source: "../icons/" + iconName + ".svg"
+    icon.source: Qt.resolvedUrl("../icons/" + iconName + ".svg")
     icon.width: iconSize
     icon.height: iconSize
     icon.color: active ? Theme.accent : Material.foreground

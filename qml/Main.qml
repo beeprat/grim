@@ -31,16 +31,19 @@ ApplicationWindow {
         pages: [0, 0, 35, 39], seek: [0, 39, 35, 5],
         nowPlaying: [35, 0, 13, 17], lyrics: [35, 17, 13, 14], rating: [35, 31, 13, 4], volume: [35, 35, 13, 4], controls: [35, 39, 13, 5]
     })
-    // Smallest size per panel, in pixels, so the content still fits (bars at their classic height).
+    // Smallest size per panel, in pixels: small, so any size can be picked (content is clipped).
     readonly property var panelMinPixels: ({
-        pages: [320, 220], seek: [200, 52], nowPlaying: [200, 180], lyrics: [160, 100], rating: [160, 52],
-        volume: [170, 52], controls: [200, 52]
+        pages: [40, 36], seek: [40, 36], nowPlaying: [40, 36], lyrics: [40, 36], rating: [40, 36],
+        volume: [40, 36], controls: [40, 36]
     })
     readonly property var panelNames: ({
         pages: qsTr("Pages"), seek: qsTr("Seek bar"), nowPlaying: qsTr("Now playing"), lyrics: qsTr("Lyrics"),
         rating: qsTr("Rating"), volume: qsTr("Volume"), controls: qsTr("Playback controls")
     })
     property var panelRects: defaultPanelRects
+    // Panels hidden while arranging: id -> the rect they had (they are not in panelRects meanwhile).
+    // Shown again from the sidebar while arranging.
+    property var hiddenPanels: ({})
 
     // The lyrics panel, shown or hidden with the lyrics button on the now-playing panel. Remembered.
     property alias lyricsVisible: nowPlayingSettings.lyricsVisible
@@ -65,6 +68,7 @@ ApplicationWindow {
         category: "layout"
         property string grid: ""
         property string gridSize: ""
+        property string hidden: ""
     }
 
     // Fractional cells: compare with a little slack so touching edges never count as overlapping.
@@ -100,6 +104,8 @@ ApplicationWindow {
         if (rects === null || typeof rects !== "object")
             return false
         for (const id in defaultPanelRects) {
+            if (id in hiddenPanels)
+                continue
             const r = rects[id]
             if (!Array.isArray(r) || r.length < 4 || r.length > 6 || r.some(v => typeof v !== "number" || !isFinite(v))
                 || !placeable(id, r, rects))
@@ -155,17 +161,90 @@ ApplicationWindow {
                 snapTo(rect[1] + rect[3] + dy, edgeGuides(id, 1)) - rect[1]]
     }
 
-    function setPanelRect(id, rect) {
-        const rects = Object.assign({}, panelRects)
+    // Cells plus the fixed sizes in pixels (see fixedPixels): the size the panel has now, as placed.
+    function withFixed(id, rect) {
         rect = rect.slice(0, 4)
-        // Fixed sizes in pixels (see fixedPixels): the size the panel has now, as placed.
         rect.push(id in barHeights ? rect[3] * panelGrid.cellHeight - panelGrid.gap : -1,
                   id in sideWidths ? rect[2] * panelGrid.cellWidth - panelGrid.gap : -1)
-        rects[id] = rect
-        panelRects = rects
-        layoutSettings.grid = JSON.stringify(rects)
+        return rect
+    }
+
+    function saveLayout() {
+        layoutSettings.grid = JSON.stringify(panelRects)
+        layoutSettings.hidden = JSON.stringify(hiddenPanels)
         // The grid's size at the time, so fixed panels keep their pixel distance from the nearer edge.
         layoutSettings.gridSize = JSON.stringify([panelGrid.width, panelGrid.height])
+    }
+
+    function setPanelRect(id, rect) {
+        const rects = Object.assign({}, panelRects)
+        rects[id] = withFixed(id, rect)
+        panelRects = rects
+        saveLayout()
+    }
+
+    // Dropping a panel onto another one: when the drop overlaps exactly one panel, the two trade places
+    // (each takes the other's rectangle). Returns the other panel's id, or "" if they can't swap.
+    function swapTarget(id, rect) {
+        let target = ""
+        for (const other in panelRects) {
+            if (other === id || !overlaps(rect, panelRects[other]))
+                continue
+            if (target !== "")
+                return ""
+            target = other
+        }
+        if (target === "")
+            return ""
+        const rects = Object.assign({}, panelRects)
+        rects[id] = panelRects[target]
+        rects[target] = panelRects[id]
+        return fits(id, rects[id], rects) && fits(target, rects[target], rects) ? target : ""
+    }
+
+    function swapPanels(a, b) {
+        const rects = Object.assign({}, panelRects)
+        rects[a] = withFixed(a, panelRects[b])
+        rects[b] = withFixed(b, panelRects[a])
+        panelRects = rects
+        saveLayout()
+    }
+
+    function hidePanel(id) {
+        const rects = Object.assign({}, panelRects)
+        const hidden = Object.assign({}, hiddenPanels)
+        hidden[id] = rects[id]
+        delete rects[id]
+        hiddenPanels = hidden
+        panelRects = rects
+        saveLayout()
+    }
+
+    // Back where it was; if that space is taken now, the first free spot (largest size first).
+    function showPanel(id) {
+        let rect = hiddenPanels[id].slice(0, 4)
+        if (!fits(id, rect, panelRects)) {
+            rect = null
+            for (let w = hiddenPanels[id][2], h = hiddenPanels[id][3]; !rect && (w >= 1 || h >= 1);
+                 w = Math.floor(w / 2), h = Math.floor(h / 2)) {
+                const cw = Math.max(1, Math.ceil(w))
+                const ch = Math.max(1, Math.ceil(h))
+                for (let y = 0; !rect && y + ch <= kGridRows; ++y) {
+                    for (let x = 0; !rect && x + cw <= kGridCols; ++x) {
+                        if (fits(id, [x, y, cw, ch], panelRects))
+                            rect = [x, y, cw, ch]
+                    }
+                }
+                if (w <= 1 && h <= 1)
+                    break
+            }
+        }
+        if (!rect)
+            return // no free space: stays hidden until something is moved or hidden
+        const hidden = Object.assign({}, hiddenPanels)
+        delete hidden[id]
+        hiddenPanels = hidden
+        setPanelRect(id, rect)
     }
 
     // When the window size changes, panels keep their size in pixels where it matters (as in the classic
@@ -398,6 +477,8 @@ ApplicationWindow {
         const ch = panelGrid.cellHeight
         const g = panelGrid.gap
         for (const id in defaultPanelRects) {
+            if (id in hiddenPanels)
+                continue
             const r = pixelOf(id)
             rects[id] = [r[0] / cw, r[1] / ch, (r[2] + g) / cw, (r[3] + g) / ch,
                          id in barHeights ? r[3] : -1, id in sideWidths ? r[2] : -1]
@@ -420,25 +501,29 @@ ApplicationWindow {
         } else {
             const px = renderedRects()
             panelRects = cellsFromPixels(id => px[id])
-            layoutSettings.grid = JSON.stringify(panelRects)
-            layoutSettings.gridSize = JSON.stringify([panelGrid.width, panelGrid.height])
+            saveLayout()
         }
     }
 
     function resetPanelRects() {
         panelRects = defaultPanelRects
+        hiddenPanels = {}
         layoutSettings.grid = ""
         layoutSettings.gridSize = ""
+        layoutSettings.hidden = ""
     }
 
     Component.onCompleted: {
         let stored = null
         try {
             stored = JSON.parse(layoutSettings.grid)
+            const hidden = layoutSettings.hidden !== "" ? JSON.parse(layoutSettings.hidden) : {}
+            if (hidden && typeof hidden === "object")
+                hiddenPanels = hidden
         } catch (e) {
         }
         // Layouts saved before lyrics had a panel of their own: lyrics take the lower part of now playing.
-        if (stored && stored.nowPlaying && !stored.lyrics) {
+        if (stored && stored.nowPlaying && !stored.lyrics && !("lyrics" in hiddenPanels)) {
             const r = stored.nowPlaying
             const top = Math.round(r[3] * 0.55)
             stored.nowPlaying = [r[0], r[1], r[2], top]
@@ -486,6 +571,11 @@ ApplicationWindow {
         // Proposed rectangle while dragging, or null.
         property var preview: null
         readonly property bool previewFits: preview !== null && root.fits(panelId, preview, root.panelRects)
+        // Moving onto exactly one other panel trades places with it.
+        readonly property string previewSwap: preview !== null && !previewFits && !resizeArea.pressed
+                                              ? root.swapTarget(panelId, preview) : ""
+
+        visible: !(panelId in root.hiddenPanels)
 
         // The classic layout until a panel has been moved, then the grid.
         readonly property var classic: root.classicLayout ? root.classicRect(panelId) : null
@@ -518,7 +608,8 @@ ApplicationWindow {
             radius: Theme.radius
             color: "transparent"
             border.width: 3
-            border.color: slot.previewFits ? Theme.accent : Material.color(Material.Red, Material.Shade400)
+            border.color: slot.previewFits || slot.previewSwap !== "" ? Theme.accent
+                                                                      : Material.color(Material.Red, Material.Shade400)
         }
 
         Rectangle {
@@ -551,8 +642,21 @@ ApplicationWindow {
                 onReleased: {
                     if (slot.previewFits)
                         root.setPanelRect(slot.panelId, slot.preview)
+                    else if (slot.previewSwap !== "")
+                        root.swapPanels(slot.panelId, slot.previewSwap)
                     slot.preview = null
                 }
+            }
+
+            // Hide: shown again from the sidebar while arranging.
+            IconButton {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 4
+                iconName: "close"
+                iconSize: 16
+                tip: qsTr("Hide panel")
+                onClicked: root.hidePanel(slot.panelId)
             }
 
             // Resize: the bottom-right corner.
@@ -724,25 +828,74 @@ ApplicationWindow {
         id: tagDialog
 
         property var urls: []
+        // Every song the dialog was opened for (an album). The arrows step from all of them (view -1)
+        // through each song on its own; what is typed in each view is kept and all written on Save.
+        property var allUrls: []
+        property var songTitles: []
+        property int view: -1
+        property var pending: ({}) // view -> {fields, coverAction, newCover}
         property var original: ({})
         property int coverAction: 0 // 0 keep, 1 replace, 2 remove
         property url newCover
         property string failure
         readonly property bool several: urls.length > 1
-        readonly property var keys: ["title", "artist", "albumArtist", "album", "genre", "year", "track", "composer", "label"]
+        readonly property var keys: ["title", "artist", "albumArtist", "album", "genre", "year", "track", "disc", "composer", "label"]
         readonly property var labels: [qsTr("Title"), qsTr("Artist"), qsTr("Album artist"), qsTr("Album"),
-                                       qsTr("Genre"), qsTr("Year"), qsTr("Track number"), qsTr("Composer"),
+                                       qsTr("Genre"), qsTr("Year"), qsTr("Track number"), qsTr("Disc number"),
+                                       qsTr("Composer"),
                                        qsTr("Label")]
 
         function ask(fileUrls) {
-            urls = fileUrls
-            original = LibraryController.tagsOf(fileUrls)
-            coverAction = 0
-            newCover = ""
+            allUrls = fileUrls
+            const titles = []
+            if (fileUrls.length > 1) {
+                for (const url of fileUrls) {
+                    const tags = LibraryController.tagsOf([url])
+                    titles.push(tags.title || decodeURIComponent(url.toString().split("/").pop()))
+                }
+            }
+            songTitles = titles
+            pending = {}
             failure = ""
-            for (let i = 0; i < tagFields.count; ++i)
-                tagFields.itemAt(i).reset()
+            view = -1
+            load()
             open()
+        }
+
+        // Fields typed into in the current view, and its cover change.
+        function stash() {
+            const fields = {}
+            for (let i = 0; i < tagFields.count; ++i) {
+                const field = tagFields.itemAt(i)
+                if (field.edited)
+                    fields[field.key] = field.text
+            }
+            const all = Object.assign({}, pending)
+            all[view] = {fields: fields, coverAction: coverAction, newCover: newCover}
+            pending = all
+        }
+
+        // Shows the current view: its songs' tags, with what was typed there before.
+        function load() {
+            urls = view < 0 ? allUrls : [allUrls[view]]
+            original = LibraryController.tagsOf(urls)
+            const kept = pending[view]
+            coverAction = kept ? kept.coverAction : 0
+            newCover = kept ? kept.newCover : ""
+            for (let i = 0; i < tagFields.count; ++i) {
+                const field = tagFields.itemAt(i)
+                field.reset()
+                if (kept && field.key in kept.fields) {
+                    field.text = kept.fields[field.key]
+                    field.edited = true
+                }
+            }
+        }
+
+        function step(by) {
+            stash()
+            view = Math.max(-1, Math.min(allUrls.length - 1, view + by))
+            load()
         }
 
         anchors.centerIn: Overlay.overlay
@@ -754,15 +907,24 @@ ApplicationWindow {
         title: several ? qsTr("Edit info (%1 tracks)").arg(urls.length) : qsTr("Edit info")
         standardButtons: Dialog.Save | Dialog.Cancel
         onAccepted: {
-            const fields = {}
-            for (let i = 0; i < tagFields.count; ++i) {
-                const field = tagFields.itemAt(i)
-                if (field.edited)
-                    fields[field.key] = field.text
+            stash()
+            // All songs first, then each song's own changes over them.
+            const views = Object.keys(pending).map(Number).sort((x, y) => x - y)
+            failure = ""
+            for (const v of views) {
+                const change = pending[v]
+                if (Object.keys(change.fields).length === 0 && change.coverAction === 0)
+                    continue
+                const error = LibraryController.writeTags(v < 0 ? allUrls : [allUrls[v]], change.fields,
+                                                          change.coverAction, change.newCover)
+                if (error !== "")
+                    failure = error
             }
-            failure = LibraryController.writeTags(urls, fields, coverAction, newCover)
-            if (failure !== "")
+            pending = {}
+            if (failure !== "") {
+                load()
                 open() // stay open with the message
+            }
         }
 
         FileDialog {
@@ -777,133 +939,178 @@ ApplicationWindow {
             }
         }
 
-        RowLayout {
+        ColumnLayout {
             width: parent.width
-            spacing: 16
+            spacing: 10
 
-            // Cover: current, newly picked, or none.
-            ColumnLayout {
-                Layout.alignment: Qt.AlignTop
-                Layout.fillWidth: false
+            // Album: arrows step from all songs to each song on its own and back.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: tagDialog.allUrls.length > 1
                 spacing: 4
 
-                Rectangle {
-                    Layout.preferredWidth: 120
-                    Layout.preferredHeight: 120
-                    radius: 6
-                    color: Theme.subtle
-                    clip: true
-
-                    Image {
-                        id: tagCover
-
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                        source: tagDialog.coverAction === 1 ? tagDialog.newCover
-                              : tagDialog.coverAction === 0 && tagDialog.original.hasCover === true
-                                ? tagDialog.original.coverUrl : ""
-                    }
-                    Label {
-                        anchors.centerIn: parent
-                        visible: tagCover.status !== Image.Ready
-                        text: qsTr("No cover")
-                        opacity: 0.5
-                        font.pixelSize: 12
+                component StepButton: AbstractButton {
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    opacity: enabled ? 1 : 0.3
+                    background: Item {}
+                    contentItem: Label {
+                        text: parent.text
+                        font.pixelSize: 20
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 0
-
-                    Button {
-                        flat: true
-                        leftPadding: 6
-                        rightPadding: 6
-                        font.pixelSize: 12
-                        text: qsTr("Change…")
-                        onClicked: coverPicker.open()
-                    }
-                    Button {
-                        flat: true
-                        leftPadding: 6
-                        rightPadding: 6
-                        font.pixelSize: 12
-                        text: qsTr("Remove")
-                        enabled: tagDialog.coverAction === 1 || (tagDialog.coverAction === 0 && tagDialog.original.hasCover === true)
-                        onClicked: tagDialog.coverAction = 2
-                    }
+                StepButton {
+                    text: "‹"
+                    enabled: tagDialog.view > -1
+                    onClicked: tagDialog.step(-1)
+                }
+                Label {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    font.pixelSize: 13
+                    text: tagDialog.view < 0 ? qsTr("All %1 songs").arg(tagDialog.allUrls.length)
+                          : qsTr("%1 / %2  ·  %3").arg(tagDialog.view + 1).arg(tagDialog.allUrls.length)
+                                                     .arg(tagDialog.songTitles[tagDialog.view] ?? "")
+                }
+                StepButton {
+                    text: "›"
+                    enabled: tagDialog.view < tagDialog.allUrls.length - 1
+                    onClicked: tagDialog.step(1)
                 }
             }
 
-            // One row per field: small label, slim outlined box.
-            ColumnLayout {
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                spacing: 6
+                spacing: 16
 
-                Repeater {
-                    id: tagFields
+                // Cover: current, newly picked, or none.
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.fillWidth: false
+                    spacing: 4
 
-                    model: tagDialog.keys.length
+                    Rectangle {
+                        Layout.preferredWidth: 120
+                        Layout.preferredHeight: 120
+                        radius: 6
+                        color: Theme.subtle
+                        clip: true
 
-                    delegate: RowLayout {
-                        id: row
+                        Image {
+                            id: tagCover
 
-                        required property int index
-                        readonly property string key: tagDialog.keys[index]
-                        readonly property bool mixed: (tagDialog.original.mixed || []).includes(key)
-                        property alias text: field.text
-                        property bool edited: false
-
-                        function reset() {
-                            field.text = tagDialog.original[key] || ""
-                            edited = false
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: false
+                            source: tagDialog.coverAction === 1 ? tagDialog.newCover
+                                  : tagDialog.coverAction === 0 && tagDialog.original.hasCover === true
+                                    ? tagDialog.original.coverUrl : ""
                         }
-
-                        Layout.fillWidth: true
-                        spacing: 10
-                        // A title or track number is one song's own.
-                        enabled: !(tagDialog.several && (key === "title" || key === "track"))
-
                         Label {
-                            Layout.preferredWidth: 84
-                            text: tagDialog.labels[row.index]
-                            opacity: 0.6
+                            anchors.centerIn: parent
+                            visible: tagCover.status !== Image.Ready
+                            text: qsTr("No cover")
+                            opacity: 0.5
                             font.pixelSize: 12
-                            elide: Text.ElideRight
                         }
+                    }
 
-                        TextField {
-                            id: field
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 0
 
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 32
-                            Material.containerStyle: Material.Outlined
-                            topPadding: 0
-                            bottomPadding: 0
-                            leftPadding: 10
-                            font.pixelSize: 13
-                            selectByMouse: true
-                            placeholderText: row.mixed ? qsTr("Several values") : ""
-                            inputMethodHints: row.key === "year" || row.key === "track" ? Qt.ImhDigitsOnly : Qt.ImhNone
-                            validator: RegularExpressionValidator {
-                                regularExpression: row.key === "year" || row.key === "track" ? /\d{0,4}/ : /.*/
-                            }
-                            onTextEdited: row.edited = true
+                        Button {
+                            flat: true
+                            leftPadding: 6
+                            rightPadding: 6
+                            font.pixelSize: 12
+                            text: qsTr("Change…")
+                            onClicked: coverPicker.open()
+                        }
+                        Button {
+                            flat: true
+                            leftPadding: 6
+                            rightPadding: 6
+                            font.pixelSize: 12
+                            text: qsTr("Remove")
+                            enabled: tagDialog.coverAction === 1 || (tagDialog.coverAction === 0 && tagDialog.original.hasCover === true)
+                            onClicked: tagDialog.coverAction = 2
                         }
                     }
                 }
 
-                Label {
+                // One row per field: small label, slim outlined box.
+                ColumnLayout {
                     Layout.fillWidth: true
-                    visible: tagDialog.failure !== ""
-                    text: tagDialog.failure
-                    color: Theme.danger
-                    font.pixelSize: 12
-                    wrapMode: Text.Wrap
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 6
+
+                    Repeater {
+                        id: tagFields
+
+                        model: tagDialog.keys.length
+
+                        delegate: RowLayout {
+                            id: row
+
+                            required property int index
+                            readonly property string key: tagDialog.keys[index]
+                            readonly property bool mixed: (tagDialog.original.mixed || []).includes(key)
+                            property alias text: field.text
+                            property bool edited: false
+
+                            function reset() {
+                                field.text = tagDialog.original[key] || ""
+                                edited = false
+                            }
+
+                            Layout.fillWidth: true
+                            spacing: 10
+                            // A title or track number is one song's own.
+                            enabled: !(tagDialog.several && (key === "title" || key === "track"))
+
+                            Label {
+                                Layout.preferredWidth: 84
+                                text: tagDialog.labels[row.index]
+                                opacity: 0.6
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+
+                            TextField {
+                                id: field
+
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 32
+                                Material.containerStyle: Material.Outlined
+                                topPadding: 0
+                                bottomPadding: 0
+                                leftPadding: 10
+                                font.pixelSize: 13
+                                selectByMouse: true
+                                placeholderText: row.mixed ? qsTr("Several values") : ""
+                                inputMethodHints: row.key === "year" || row.key === "track" || row.key === "disc" ? Qt.ImhDigitsOnly : Qt.ImhNone
+                                validator: RegularExpressionValidator {
+                                    regularExpression: row.key === "year" || row.key === "track" || row.key === "disc" ? /\d{0,4}/ : /.*/
+                                }
+                                onTextEdited: row.edited = true
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        visible: tagDialog.failure !== ""
+                        text: tagDialog.failure
+                        color: Theme.danger
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
                 }
             }
         }
@@ -1100,6 +1307,33 @@ ApplicationWindow {
                                 onClicked: root.editLayout = !root.editLayout
                             }
 
+                            // Hidden panels, to show again.
+                            NavButton {
+                                visible: root.editLayout && Object.keys(root.hiddenPanels).length > 0
+                                text: qsTr("Show hidden panel")
+                                icon.source: "icons/add.svg"
+                                highlighted: hiddenMenu.visible
+                                onClicked: hiddenMenu.popup(width + 4, 0)
+
+                                CompactMenu {
+                                    id: hiddenMenu
+
+                                    Instantiator {
+                                        model: Object.keys(root.hiddenPanels)
+
+                                        delegate: CompactMenuItem {
+                                            required property string modelData
+
+                                            text: root.panelNames[modelData]
+                                            onTriggered: root.showPanel(modelData)
+                                        }
+
+                                        onObjectAdded: (index, item) => hiddenMenu.insertItem(index, item)
+                                        onObjectRemoved: (index, item) => hiddenMenu.removeItem(item)
+                                    }
+                                }
+                            }
+
                             NavButton {
                                 visible: root.editLayout
                                 text: qsTr("Reset panel layout")
@@ -1262,7 +1496,7 @@ ApplicationWindow {
                             id: lyricsSlot
 
                             panelId: "lyrics"
-                            visible: root.lyricsVisible || root.editLayout
+                            visible: (root.lyricsVisible || root.editLayout) && !("lyrics" in root.hiddenPanels)
 
                             LyricsPanel {
                                 anchors.fill: parent

@@ -34,6 +34,8 @@ const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
 const auto kStoppedKey = "slskd/stopped"_L1;
 const auto kPasswordName = "slskd-password"_L1; // CredentialStore
+const auto kWebUsernameKey = "slskd/webUsername"_L1;
+const auto kWebPasswordName = "slskd-web-password"_L1; // CredentialStore
 
 } // namespace
 
@@ -59,6 +61,9 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
         m_downloadFormat = u"m4a"_s;
     m_username = stored.value(kUsernameKey).toString();
     m_stopped = stored.value(kStoppedKey, false).toBool();
+    m_webUsername = stored.value(kWebUsernameKey).toString();
+    if (!m_webUsername.isEmpty())
+        m_runner->setWebLogin(m_webUsername, CredentialStore::read(kWebPasswordName));
     // Only grim. and only this PC use it (slskd accepts it from 127.0.0.1 only), so plain QSettings is fine.
     m_managedApiKey = stored.value(kManagedApiKeyKey).toString();
     if (m_managedApiKey.size() < 32) {
@@ -203,6 +208,42 @@ void SlskdController::setManagedRunning(bool running)
         setStatus(Offline);
     }
     emit managedStatusChanged();
+}
+
+bool SlskdController::webUi() const
+{
+    return !m_webUsername.isEmpty();
+}
+
+QString SlskdController::webUsername() const
+{
+    return m_webUsername;
+}
+
+QString SlskdController::webUrl() const
+{
+    return m_runner->serverUrl();
+}
+
+void SlskdController::setWebUi(bool enabled, const QString &username, const QString &password)
+{
+    const QString name = enabled ? username.trimmed() : QString();
+    if (enabled && name.isEmpty())
+        return;
+    if (enabled && !password.isEmpty() && !CredentialStore::write(kWebPasswordName, password)) {
+        setErrorText(tr("Could not store the web page password."));
+        return;
+    }
+    const QString stored = enabled ? CredentialStore::read(kWebPasswordName) : QString();
+    if (enabled && stored.isEmpty())
+        return; // a login needs a password
+    m_webUsername = name;
+    QSettings().setValue(kWebUsernameKey, m_webUsername);
+    m_runner->setWebLogin(m_webUsername, stored);
+    emit settingsChanged();
+    // slskd reads it at start.
+    if (managedRunning() && m_runner->state() == SlskdRunner::Running)
+        restartManaged();
 }
 
 bool SlskdController::managed() const

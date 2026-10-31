@@ -699,6 +699,64 @@ Item {
                         }
                     }
 
+                    // slskd's own web page, behind a login of its own.
+                    Switch {
+                        id: webSwitch
+
+                        text: qsTr("slskd web page")
+                        enabled: SlskdController.managed
+                        checked: SlskdController.webUi
+                        onToggled: if (!checked) SlskdController.setWebUi(false)
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: webSwitch.checked
+                        spacing: 8
+
+                        TextField {
+                            id: webUserField
+
+                            Layout.preferredWidth: 200
+                            placeholderText: qsTr("Web page username")
+                            text: SlskdController.webUsername
+                            onAccepted: if (saveWeb.enabled) saveWeb.clicked()
+                        }
+
+                        TextField {
+                            id: webPasswordField
+
+                            Layout.fillWidth: true
+                            // Never shown back: an empty field keeps the stored password.
+                            placeholderText: SlskdController.webUi ? qsTr("Password (saved)") : qsTr("Password")
+                            echoMode: TextInput.Password
+                            onAccepted: if (saveWeb.enabled) saveWeb.clicked()
+                        }
+
+                        Button {
+                            id: saveWeb
+
+                            text: SlskdController.webUi ? qsTr("Save") : qsTr("Turn on")
+                            enabled: webUserField.text.trim() !== ""
+                                     && (SlskdController.webUi ? webUserField.text !== SlskdController.webUsername || webPasswordField.text !== ""
+                                                               : webPasswordField.text !== "")
+                            onClicked: {
+                                SlskdController.setWebUi(true, webUserField.text, webPasswordField.text)
+                                webPasswordField.text = ""
+                            }
+                        }
+                    }
+
+                    Label {
+                        visible: SlskdController.webUi && webSwitch.checked
+                        text: "<a href=\"%1\">%1</a>".arg(SlskdController.webUrl)
+                        textFormat: Text.RichText
+                        font.pixelSize: 12
+                        onLinkActivated: (link) => Qt.openUrlExternally(link)
+
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+
                     Hint {
                         text: qsTr("grim. downloads slskd (AGPL-3.0, source at github.com/slskd/slskd) and runs it only while grim. is open, reachable only from this PC. The password is kept in the system's credential store. Downloads go to the library folder. For more and faster downloads, allow incoming TCP port 50300 in your router.")
                     }

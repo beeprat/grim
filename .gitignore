@@ -4,3 +4,4 @@ CMakeUserPresets.json
 .qmlls.ini
 *.user
 dist/
+graphify-out/

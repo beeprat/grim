@@ -1,4 +1,6 @@
+import QtCore
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Controls.Material
 import MusicPlayer
@@ -85,6 +87,118 @@ ColumnLayout {
         }
     }
 
+    // Bare icon button for the equalizer: no hover highlight or ripple.
+    component EqButton: IconButton {
+        Layout.preferredWidth: 22
+        Layout.preferredHeight: 22
+        padding: 0
+        topInset: 0
+        bottomInset: 0
+        leftInset: 0
+        rightInset: 0
+        background: Item {} // just the icon: no hover highlight or ripple
+        iconSize: 16
+    }
+
+    // A preset's name: its file name without the folder and .json.
+    function presetName(fileUrl) {
+        const name = decodeURIComponent(fileUrl.toString().split("/").pop())
+        return name.replace(/\.json$/i, "")
+    }
+
+    // Saved equalizers: pick one to apply it. Shows "Custom" when the bands match none, or the preset
+    // last picked marked as edited; save, rename and delete act on that preset.
+    RowLayout {
+        id: presets
+
+        readonly property int matching: Effects.equalizerPresets.findIndex(
+                                             p => p.gains.every((g, i) => g === Effects.equalizerGains[i]))
+        readonly property int picked: Effects.equalizerPresets.findIndex(p => p.name === Effects.currentPreset)
+        readonly property bool edited: picked >= 0 && matching !== picked
+
+        Layout.bottomMargin: 10
+        visible: Effects.equalizerPresets.length > 0
+        spacing: 6
+
+        // Renaming: the name is edited in place of the list. Enter saves, Escape or clicking away cancels.
+        TextField {
+            id: renameField
+
+            property string name
+
+            Layout.preferredWidth: 200
+            Layout.preferredHeight: 32
+            visible: false
+            topPadding: 0
+            bottomPadding: 0
+            leftPadding: 10
+            topInset: 0
+            bottomInset: 0
+            font.pixelSize: 13
+            selectByMouse: true
+            background: Rectangle {
+                radius: 6
+                color: Theme.subtle
+                border.width: 1
+                border.color: Theme.accent
+            }
+            onAccepted: if (Effects.renamePreset(name, text)) visible = false
+            onActiveFocusChanged: if (!activeFocus) visible = false
+            Keys.onEscapePressed: visible = false
+        }
+
+        CompactComboBox {
+            id: presetBox
+
+            Layout.preferredWidth: 200
+            Layout.preferredHeight: 32
+            visible: !renameField.visible
+            // The box fills its height and the list opens flush under it (Material leaves room above/below).
+            topInset: 0
+            bottomInset: 0
+            popup.y: height - 4 // PopupBackground draws its edge inside: flush with the box
+            textRole: "name"
+            model: Effects.equalizerPresets
+            currentIndex: presets.edited ? presets.picked : presets.matching
+            displayText: presets.edited ? qsTr("%1 (edited)").arg(currentText)
+                       : currentIndex >= 0 ? currentText : qsTr("Custom")
+            onActivated: (index) => {
+                Effects.equalizerGains = Effects.equalizerPresets[index].gains
+                Effects.currentPreset = Effects.equalizerPresets[index].name
+            }
+            // Plain rounded box: no outline (the Material one turns accent-coloured on focus).
+            background: Rectangle {
+                radius: 6
+                color: presetBox.hovered ? Theme.hover : Theme.subtle
+            }
+        }
+
+        EqButton {
+            visible: presets.edited
+            iconName: "save"
+            tip: qsTr("Save changes to this preset")
+            onClicked: Effects.savePreset(Effects.currentPreset, Effects.equalizerGains)
+        }
+        EqButton {
+            visible: presetBox.currentIndex >= 0
+            iconName: "edit"
+            tip: qsTr("Rename preset")
+            onClicked: {
+                renameField.name = Effects.equalizerPresets[presetBox.currentIndex].name
+                renameField.text = renameField.name
+                renameField.visible = true
+                renameField.forceActiveFocus()
+                renameField.selectAll()
+            }
+        }
+        EqButton {
+            visible: presetBox.currentIndex >= 0
+            iconName: "delete"
+            tip: qsTr("Delete preset")
+            onClicked: Effects.deletePreset(Effects.equalizerPresets[presetBox.currentIndex].name)
+        }
+    }
+
     // Equalizer, always on: 16 bands, 31 Hz … 16 kHz (0.6 octave apart), ±12 dB. Double-click a
     // band to zero it; the button at the end zeroes them all.
     RowLayout {
@@ -155,22 +269,58 @@ ColumnLayout {
             }
         }
 
-        IconButton {
-            // Slim: just the icon, so the bands get the width.
+        // Reset, then import and export a preset: bare icons, so the bands get the width.
+        ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: 22
-            Layout.preferredHeight: 22
-            padding: 0
-            topInset: 0
-            bottomInset: 0
-            leftInset: 0
-            rightInset: 0
-            background: Item {} // just the icon: no hover highlight or ripple
-            iconName: "restart"
-            iconSize: 16
-            tip: qsTr("Reset equalizer")
-            enabled: Effects.equalizerGains.some(g => g !== 0)
-            onClicked: Effects.equalizerGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            spacing: 8
+
+
+            EqButton {
+                iconName: "restart"
+                tip: qsTr("Reset equalizer")
+                enabled: Effects.equalizerGains.some(g => g !== 0)
+                onClicked: Effects.equalizerGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            }
+            EqButton {
+                iconName: "upload"
+                tip: qsTr("Import equalizer")
+                onClicked: eqImportDialog.open()
+            }
+            EqButton {
+                iconName: "download"
+                tip: qsTr("Export equalizer")
+                onClicked: eqExportDialog.open()
+            }
+        }
+    }
+
+    FileDialog {
+        id: eqExportDialog
+
+        title: qsTr("Export equalizer")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [qsTr("grim. equalizer (*.json)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            if (PlayerController.exportEqualizer(selectedFile, Effects.equalizerGains))
+                Effects.savePreset(controls.presetName(selectedFile), Effects.equalizerGains)
+        }
+    }
+
+    FileDialog {
+        id: eqImportDialog
+
+        title: qsTr("Import equalizer")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("grim. equalizer (*.json)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            const gains = PlayerController.importEqualizer(selectedFile)
+            if (gains.length === 16) {
+                Effects.equalizerGains = gains
+                Effects.savePreset(controls.presetName(selectedFile), gains)
+            }
         }
     }
 

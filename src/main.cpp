@@ -13,6 +13,7 @@
 #include "controllers/StatsController.h"
 #include "controllers/TrayController.h"
 #include "controllers/UpdateController.h"
+#include "controllers/WindowFrame.h"
 #include "core/LibraryDatabase.h"
 #include "core/StatsDatabase.h"
 #include "core/UserDataMigration.h"
@@ -165,6 +166,7 @@ int main(int argc, char *argv[])
     else
         playerController.restoreLastTrack();
 
+    WindowFrame windowFrame;
     QQmlApplicationEngine engine;
     // Engine takes ownership. Scaled covers are cached under the local (not roaming) cache folder.
     engine.addImageProvider(QStringLiteral("cover"),
@@ -196,6 +198,7 @@ int main(int argc, char *argv[])
         });
 #ifdef Q_OS_WIN
         mediaKeys.registerFor(window);
+        windowFrame.attach(window);
         // Windows 11 rounds the frameless window's corners like normal windows (ignored on Windows 10).
         const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
         DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_WINDOW_CORNER_PREFERENCE,

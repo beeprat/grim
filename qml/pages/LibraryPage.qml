@@ -681,8 +681,8 @@ Item {
                         width: albumGrid.width
                         height: artistHero.height + 16
 
-                        // Artist header: photo (or the first album's cover) with plays and time listened
-                        // above the name, the album count under it.
+                        // Artist header: photo (or the first album's cover) with the album count
+                        // above the name, plays and time listened under it.
                         Rectangle {
                             id: artistHero
 
@@ -746,11 +746,8 @@ Item {
 
                                 Label {
                                     text: {
-                                        const plays = page.artistStats.playCount
                                         const albums = LibraryController.albums.count
-                                        return (albums === 1 ? qsTr("1 album") : qsTr("%1 albums").arg(albums))
-                                               + "  ·  " + (plays === 1 ? qsTr("1 play") : qsTr("%1 plays").arg(plays))
-                                               + "  ·  " + qsTr("%1 listened").arg(page.formatListened(page.artistStats.listenedMs))
+                                        return albums === 1 ? qsTr("1 album") : qsTr("%1 albums").arg(albums)
                                     }
                                     color: "white"
                                     opacity: 0.85
@@ -765,10 +762,22 @@ Item {
                                     // Big glyphs sit a little right of their box and have empty space above:
                                     // pull it in line with the stats and close to them.
                                     Layout.leftMargin: -Math.round(font.pixelSize * 0.06)
-                                    Layout.topMargin: -Math.round(font.pixelSize * 0.14)
+                                    Layout.topMargin: -Math.round(font.pixelSize * 0.22)
+                                    // Descender space below the glyphs: pull the plays line up to the name.
+                                    Layout.bottomMargin: -Math.round(font.pixelSize * 0.08)
                                     elide: Text.ElideRight
                                     fontSizeMode: Text.HorizontalFit
                                     minimumPixelSize: 28
+                                }
+                                Label {
+                                    text: {
+                                        const plays = page.artistStats.playCount
+                                        return (plays === 1 ? qsTr("1 play") : qsTr("%1 plays").arg(plays))
+                                               + "  ·  " + qsTr("%1 listened").arg(page.formatListened(page.artistStats.listenedMs))
+                                    }
+                                    color: "white"
+                                    opacity: 0.85
+                                    font.pixelSize: 15
                                 }
                             }
                         }

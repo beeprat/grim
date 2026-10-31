@@ -34,6 +34,10 @@ class SlskdController : public QObject
     Q_PROPERTY(bool managed READ managed NOTIFY settingsChanged FINAL)
     Q_PROPERTY(QString username READ username NOTIFY settingsChanged FINAL)
     Q_PROPERTY(QString managedStatus READ managedStatus NOTIFY managedStatusChanged FINAL)
+    // slskd's own web page (Settings → Soulseek), at webUrl, behind its own login (webUsername).
+    Q_PROPERTY(bool webUi READ webUi NOTIFY settingsChanged FINAL)
+    Q_PROPERTY(QString webUsername READ webUsername NOTIFY settingsChanged FINAL)
+    Q_PROPERTY(QString webUrl READ webUrl CONSTANT FINAL)
     Q_PROPERTY(bool managedBusy READ managedBusy NOTIFY managedStatusChanged FINAL) // downloading slskd
     Q_PROPERTY(bool managedFailed READ managedFailed NOTIFY managedStatusChanged FINAL)
     // The title bar's start/stop button. Stopping is remembered across restarts (it saves CPU, memory and
@@ -69,6 +73,11 @@ public:
     void setLibraryTracks(std::function<QList<Track>()> tracks);
 
     bool managed() const;
+    bool webUi() const;
+    QString webUsername() const;
+    QString webUrl() const;
+    // Turns the web page on with this login (an empty password keeps the stored one) or off; restarts slskd.
+    Q_INVOKABLE void setWebUi(bool enabled, const QString &username = {}, const QString &password = {});
     QString username() const;
     QString managedStatus() const;
     bool managedBusy() const;
@@ -139,6 +148,7 @@ private:
     QTimer *m_statusTimer;
     int m_statusChecksLeft = 0;
     SlskdRunner *m_runner;
+    QString m_webUsername; // empty: web page off
     QString m_username;
     QString m_managedApiKey; // random, accepted only from 127.0.0.1
     std::function<QList<Track>()> m_libraryTracks;

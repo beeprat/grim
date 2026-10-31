@@ -7,7 +7,11 @@
 #include "providers/CoverImageProvider.h"
 
 #include <QJSEngine>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRandomGenerator>
 #include <QSettings>
 #include <QStandardPaths>
@@ -15,6 +19,7 @@
 #include <QtLogging>
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -252,20 +257,38 @@ void PlayerController::loadLyrics()
             m_lyrics = Lyrics::parse(cached);
         } else {
             m_lyricsLoading = true;
-            const QString path = m_track.path;
-            m_lyricsFetcher->fetch(m_track, [this, path](const QString &text) {
-                if (path != m_track.path)
-                    return; // the answer is for a track that is no longer playing
-                m_lyricsLoading = false;
-                m_lyrics = Lyrics::parse(text);
-                m_lyricIndex = -2; // force a lyricIndexChanged for the new lines
-                updateLyricIndex();
-                emit lyricsChanged();
-            });
+            fetchLyrics(m_track.path, 1);
         }
     }
     updateLyricIndex();
     emit lyricsChanged();
+}
+
+void PlayerController::fetchLyrics(const QString &path, int attempt)
+{
+    // The lyrics service may be busy for a while: an answer that wasn't cached (neither lyrics nor "none")
+    // means it couldn't be asked, so ask again every 30 s while the track plays, up to 10 times.
+    constexpr int kRetries = 10;
+    constexpr int kRetryMs = 30'000;
+    m_lyricsFetcher->fetch(m_track, [this, path, attempt](const QString &text) {
+        if (path != m_track.path)
+            return; // the answer is for a track that is no longer playing
+        bool known = false;
+        m_lyricsFetcher->cached(m_track, &known);
+        if (text.isEmpty() && !known && attempt < kRetries) {
+            QTimer::singleShot(kRetryMs, this, [this, path, attempt] {
+                if (path == m_track.path && m_lyrics.isEmpty())
+                    fetchLyrics(path, attempt + 1);
+            });
+            if (attempt > 1)
+                return; // still "No lyrics found" from the first try
+        }
+        m_lyricsLoading = false;
+        m_lyrics = Lyrics::parse(text);
+        m_lyricIndex = -2; // force a lyricIndexChanged for the new lines
+        updateLyricIndex();
+        emit lyricsChanged();
+    });
 }
 
 bool PlayerController::lyricsSynced() const
@@ -324,6 +347,35 @@ void PlayerController::setEqualizer(const QList<double> &gainsDb)
         bands[band] = float(gains[band]);
     m_engine.setEqualizer(bands);
     emit effectsChanged();
+}
+
+bool PlayerController::exportEqualizer(const QUrl &fileUrl, const QList<double> &gainsDb) const
+{
+    QJsonArray gains;
+    for (int band = 0; band < 16; ++band)
+        gains.append(band < gainsDb.size() ? gainsDb[band] : 0.0);
+    QFile file(fileUrl.toLocalFile());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    const QJsonObject root{{QStringLiteral("grimEqualizer"), 1}, {QStringLiteral("gains"), gains}};
+    return file.write(QJsonDocument(root).toJson()) > 0;
+}
+
+QList<double> PlayerController::importEqualizer(const QUrl &fileUrl) const
+{
+    QFile file(fileUrl.toLocalFile());
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QJsonArray gains = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("gains")).toArray();
+    if (gains.size() != 16)
+        return {};
+    QList<double> result;
+    for (const QJsonValue &gain : gains) {
+        if (!gain.isDouble())
+            return {};
+        result.append(std::clamp(std::round(gain.toDouble()), -12.0, 12.0));
+    }
+    return result;
 }
 
 bool PlayerController::lyricsShown() const

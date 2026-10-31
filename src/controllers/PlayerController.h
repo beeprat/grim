@@ -116,6 +116,9 @@ public:
     double reverb() const;
     void setReverb(double amount);
     QList<double> equalizer() const;
+    // Equalizer preset files (JSON): save the given gains, or read them back (empty on failure).
+    Q_INVOKABLE bool exportEqualizer(const QUrl &fileUrl, const QList<double> &gainsDb) const;
+    Q_INVOKABLE QList<double> importEqualizer(const QUrl &fileUrl) const;
     void setEqualizer(const QList<double> &gainsDb);
     bool shuffle() const;
     void setShuffle(bool shuffle);
@@ -185,6 +188,7 @@ private:
     void updateLyricIndex();
     // File tag / sidecar .lrc first, then the online cache, then an online lookup.
     void loadLyrics();
+    void fetchLyrics(const QString &path, int attempt);
     // Adds time since the last resume to the current session.
     void stopClock();
     // Writes the current session's listening time so far (inserted once, then updated).

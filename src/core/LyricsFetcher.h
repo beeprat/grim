@@ -35,6 +35,9 @@ private:
     QString cacheBase(const Track &track) const;
     void store(const Track &track, const QString &lyrics);
     void search(const Track &track, std::function<void(const QString &)> onResult);
+    // GET with retries while LRCLIB is busy (429 / 5xx, e.g. 503 ServerOverloaded). Calls back with the
+    // final HTTP status (0: no connection) and body.
+    void request(const QUrl &url, int attempt, std::function<void(int status, const QByteArray &body)> onReply);
 
     QNetworkAccessManager *m_network;
     QString m_directory;

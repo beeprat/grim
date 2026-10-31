@@ -17,6 +17,40 @@ QtObject {
     property real reverbAmount: 0.4
     // Graphic equalizer, always on: 16 gains in dB (PlayerController.equalizer has the bands).
     property list<real> equalizerGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // Saved equalizers (exported or imported ones), picked from the list above the bands: [{name, gains}].
+    property var equalizerPresets: []
+    // Adds a preset, replacing one of the same name.
+    function savePreset(name, gains) {
+        const presets = equalizerPresets.filter(p => p.name !== name)
+        presets.push({name: name, gains: Array.from(gains)})
+        presets.sort((a, b) => a.name.localeCompare(b.name))
+        equalizerPresets = presets
+        currentPreset = name
+    }
+    // The preset last picked or saved (by name): the list shows it as edited once the bands change, and
+    // its changes can be saved over it. Empty: none.
+    property string currentPreset: ""
+    function deletePreset(name) {
+        equalizerPresets = equalizerPresets.filter(p => p.name !== name)
+        if (currentPreset === name)
+            currentPreset = ""
+    }
+    // False if the new name is empty or taken.
+    function renamePreset(name, newName) {
+        newName = newName.trim()
+        if (newName === "" || (newName !== name && equalizerPresets.some(p => p.name === newName)))
+            return false
+        const preset = equalizerPresets.find(p => p.name === name)
+        if (!preset)
+            return false
+        const presets = equalizerPresets.filter(p => p.name !== name)
+        presets.push({name: newName, gains: preset.gains})
+        presets.sort((a, b) => a.name.localeCompare(b.name))
+        equalizerPresets = presets
+        if (currentPreset === name)
+            currentPreset = newName
+        return true
+    }
     // Show the effects button next to the volume.
     property bool showInNowPlaying: false
 
@@ -32,7 +66,14 @@ QtObject {
         property alias showInNowPlaying: effects.showInNowPlaying
         // As text: Settings stores a list of numbers differently per platform.
         property string equalizerGains: JSON.stringify(effects.equalizerGains)
+        property string equalizerPresets: "[]"
         Component.onCompleted: {
+            try {
+                const presets = JSON.parse(equalizerPresets)
+                if (Array.isArray(presets))
+                    effects.equalizerPresets = presets.filter(p => p && typeof p.name === "string"
+                                                                   && Array.isArray(p.gains) && p.gains.length === 16)
+            } catch (e) {}
             try {
                 const gains = JSON.parse(equalizerGains)
                 if (Array.isArray(gains) && gains.length === 16)
@@ -41,6 +82,7 @@ QtObject {
         }
     }
     onEqualizerGainsChanged: store.equalizerGains = JSON.stringify(equalizerGains)
+    onEqualizerPresetsChanged: store.equalizerPresets = JSON.stringify(equalizerPresets)
 
     property Binding speedBinding: Binding {
         target: PlayerController
