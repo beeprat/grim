@@ -112,10 +112,18 @@ public:
 
     void fetchStatus(std::function<void(SlskdStatus)> onStatus);
 
-    void startSearch(const QString &text, std::function<void(const QString &searchId)> onStarted);
+    // timeoutMs: how long slskd collects responses (0 = its default, 15 s). Responses are only
+    // listed once the search is complete.
+    // onFailed (optional) gets the HTTP status (0 = no answer) instead of errorOccurred: slskd answers
+    // 429 when a search starts while another start is still being handled.
+    void startSearch(const QString &text, std::function<void(const QString &searchId)> onStarted, int timeoutMs = 0,
+                     std::function<void(int status)> onFailed = {});
     void fetchSearchState(const QString &searchId,
                           std::function<void(const QString &state, int responseCount)> onState);
-    void fetchSearchResponses(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles);
+    // Ends a running search early; its responses so far are then listed (state "Completed, Cancelled").
+    void stopSearch(const QString &searchId, std::function<void()> onStopped);
+    void fetchSearchResponses(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles,
+                              std::function<void(int status)> onFailed = {});
     // Queues files from one user in a single request (e.g. a whole album).
     void enqueueDownloads(const QList<SlskdSearchFile> &files, std::function<void()> onQueued);
     void fetchDownloads(std::function<void(QList<SlskdDownload>)> onDownloads);
@@ -130,7 +138,9 @@ signals:
 
 private:
     QNetworkRequest request(const QString &path) const;
-    void handle(QNetworkReply *reply, std::function<void(const QByteArray &body)> onSuccess);
+    // With onFailure, failures go there instead of errorOccurred.
+    void handle(QNetworkReply *reply, std::function<void(const QByteArray &body)> onSuccess,
+                std::function<void(int status)> onFailure = {});
 
     QNetworkAccessManager *m_network;
     QUrl m_baseUrl;

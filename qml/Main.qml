@@ -779,6 +779,7 @@ ApplicationWindow {
     function openTrackMenu(fileUrls, isAlbum) {
         trackMenu.urls = fileUrls
         trackMenu.isAlbum = isAlbum === true
+        trackMenu.albumOpen = root.page === 0 && libraryPage.openAlbum >= 0
         trackMenu.popup()
     }
 
@@ -817,7 +818,8 @@ ApplicationWindow {
 
         onViewAlbumRequested: (fileUrl) => root.showAlbumOf(fileUrl)
         onNewPlaylistRequested: (fileUrls) => newPlaylistWindow.openWith(fileUrls)
-        onDeleteAlbumRequested: (fileUrls) => deleteAlbumDialog.ask(fileUrls)
+        onDeleteAlbumRequested: (fileUrls) => deleteAlbumDialog.ask(fileUrls, true)
+        onDeleteSongsRequested: (fileUrls) => deleteAlbumDialog.ask(fileUrls, false)
         onGainRequested: (fileUrls) => gainDialog.ask(fileUrls)
         onEditInfoRequested: (fileUrls) => tagDialog.ask(fileUrls)
     }
@@ -1190,9 +1192,11 @@ ApplicationWindow {
 
         property var urls: []
         property string failure
+        property bool album: true // false: single songs
 
-        function ask(fileUrls) {
+        function ask(fileUrls, wholeAlbum) {
             urls = fileUrls
+            album = wholeAlbum
             failure = ""
             open()
         }
@@ -1204,7 +1208,7 @@ ApplicationWindow {
         Overlay.modal: Rectangle {
             color: Qt.rgba(0, 0, 0, 0.6)
         }
-        title: qsTr("Delete album")
+        title: album ? qsTr("Delete album") : (urls.length > 1 ? qsTr("Delete songs") : qsTr("Delete song"))
         standardButtons: failure === "" ? Dialog.Yes | Dialog.No : Dialog.Close
         onAccepted: {
             const error = LibraryController.deleteAlbum(urls)
@@ -1219,6 +1223,11 @@ ApplicationWindow {
             wrapMode: Text.Wrap
             text: deleteAlbumDialog.failure !== ""
                   ? deleteAlbumDialog.failure
+                  : !deleteAlbumDialog.album
+                  ? (deleteAlbumDialog.urls.length === 1
+                     ? qsTr("Delete this song from your computer?")
+                     : qsTr("Delete these %1 songs from your computer?").arg(deleteAlbumDialog.urls.length))
+                    + " " + qsTr("The files go to the Recycle Bin; the rest of the album stays.")
                   : (deleteAlbumDialog.urls.length === 1
                      ? qsTr("Delete this album's track from your computer?")
                      : qsTr("Delete this album's %1 tracks from your computer?").arg(deleteAlbumDialog.urls.length))

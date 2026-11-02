@@ -236,11 +236,17 @@ QNetworkRequest SlskdClient::request(const QString &path) const
     return request;
 }
 
-void SlskdClient::handle(QNetworkReply *reply, std::function<void(const QByteArray &)> onSuccess)
+void SlskdClient::handle(QNetworkReply *reply, std::function<void(const QByteArray &)> onSuccess,
+                         std::function<void(int)> onFailure)
 {
-    connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess = std::move(onSuccess)] {
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, onSuccess = std::move(onSuccess), onFailure = std::move(onFailure)] {
         reply->deleteLater();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (onFailure && reply->error() != QNetworkReply::NoError) {
+            onFailure(status);
+            return;
+        }
         if (status == 401 || status == 403) {
             emit errorOccurred(tr("slskd rejected the API key."));
             return;
@@ -253,18 +259,24 @@ void SlskdClient::handle(QNetworkReply *reply, std::function<void(const QByteArr
     });
 }
 
-void SlskdClient::startSearch(const QString &text, std::function<void(const QString &)> onStarted)
+void SlskdClient::startSearch(const QString &text, std::function<void(const QString &)> onStarted, int timeoutMs,
+                              std::function<void(int)> onFailed)
 {
-    const QJsonObject body{{"searchText"_L1, text}};
+    QJsonObject body{{"searchText"_L1, text}};
+    if (timeoutMs > 0)
+        body.insert("searchTimeout"_L1, timeoutMs);
     QNetworkReply *reply = m_network->post(request(u"searches"_s), QJsonDocument(body).toJson(QJsonDocument::Compact));
-    handle(reply, [this, onStarted = std::move(onStarted)](const QByteArray &response) {
+    handle(reply, [this, onStarted = std::move(onStarted), onFailed](const QByteArray &response) {
         const QString id = QJsonDocument::fromJson(response).object().value("id"_L1).toString();
         if (id.isEmpty()) {
-            emit errorOccurred(tr("slskd returned no search id."));
+            if (onFailed)
+                onFailed(200);
+            else
+                emit errorOccurred(tr("slskd returned no search id."));
             return;
         }
         onStarted(id);
-    });
+    }, onFailed);
 }
 
 void SlskdClient::fetchSearchState(const QString &searchId, std::function<void(const QString &, int)> onState)
@@ -276,12 +288,22 @@ void SlskdClient::fetchSearchState(const QString &searchId, std::function<void(c
     });
 }
 
-void SlskdClient::fetchSearchResponses(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles)
+void SlskdClient::stopSearch(const QString &searchId, std::function<void()> onStopped)
+{
+    const QString path = u"searches/"_s + QString::fromUtf8(QUrl::toPercentEncoding(searchId));
+    QNetworkRequest req = request(path);
+    // Any answer counts: a search that already ended cannot be stopped, and is complete anyway.
+    handle(m_network->put(req, QByteArray()), [onStopped](const QByteArray &) { onStopped(); },
+           [onStopped](int) { onStopped(); });
+}
+
+void SlskdClient::fetchSearchResponses(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles,
+                                       std::function<void(int)> onFailed)
 {
     const QString path = u"searches/"_s + QString::fromUtf8(QUrl::toPercentEncoding(searchId)) + u"/responses"_s;
     handle(m_network->get(request(path)), [onFiles = std::move(onFiles)](const QByteArray &response) {
         onFiles(Slskd::parseSearchResponses(response));
-    });
+    }, std::move(onFailed));
 }
 
 void SlskdClient::enqueueDownloads(const QList<SlskdSearchFile> &files, std::function<void()> onQueued)

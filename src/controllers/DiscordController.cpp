@@ -249,7 +249,7 @@ void DiscordController::publish()
     if (!m_coverUrl.isEmpty())
         assets.insert("large_image"_L1, m_coverUrl);
     if (!m_player.album().isEmpty())
-        assets.insert("large_text"_L1, fit(tr("on %1").arg(m_player.album())));
+        assets.insert("large_text"_L1, fit(m_player.album()));
     if (!assets.isEmpty())
         activity.insert("assets"_L1, assets);
     m_ipc->setActivity(activity);

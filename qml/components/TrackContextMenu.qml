@@ -14,9 +14,13 @@ CompactMenu {
     property bool isAlbum: false // opened on an album: offers deleting it
     readonly property url firstUrl: urls.length > 0 ? urls[0] : ""
 
+    // Opened from the album page, which already shows the album.
+    property bool albumOpen: false
+
     signal viewAlbumRequested(url fileUrl)
     signal newPlaylistRequested(var fileUrls)
     signal deleteAlbumRequested(var fileUrls)
+    signal deleteSongsRequested(var fileUrls)
     signal gainRequested(var fileUrls)
     signal editInfoRequested(var fileUrls)
 
@@ -26,6 +30,9 @@ CompactMenu {
     }
 
     CompactMenuItem {
+        // Not while that album's page is already open.
+        visible: !root.albumOpen
+        height: visible ? implicitHeight : 0
         text: qsTr("View album")
         onTriggered: root.viewAlbumRequested(root.firstUrl)
     }
@@ -112,5 +119,14 @@ CompactMenu {
         text: qsTr("Delete album…")
         Material.foreground: Material.color(Material.Red, Material.Shade300)
         onTriggered: root.deleteAlbumRequested(root.urls)
+    }
+
+    // Single songs (or a selection): the files only; their folder stays while it holds other music.
+    CompactMenuItem {
+        visible: !root.isAlbum
+        height: visible ? implicitHeight : 0
+        text: root.urls.length > 1 ? qsTr("Delete %1 songs…").arg(root.urls.length) : qsTr("Delete song…")
+        Material.foreground: Material.color(Material.Red, Material.Shade300)
+        onTriggered: root.deleteSongsRequested(root.urls)
     }
 }

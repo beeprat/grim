@@ -1,5 +1,6 @@
 #include "controllers/DiscordController.h"
 #include "controllers/LastFmController.h"
+#include "controllers/SpotifyController.h"
 #include "controllers/LibraryController.h"
 #ifdef Q_OS_WIN
 #include "controllers/MediaKeys.h"
@@ -82,6 +83,21 @@ int main(int argc, char *argv[])
         QSettings newSettings;
         UserDataMigration::moveSettings(oldSettings, newSettings);
     }
+#ifdef Q_OS_LINUX
+    // Linux taskbars and trays label the app by its application name, so it is "grim" there:
+    // ~/.local/share/grimPlayer/grim, ~/.cache/grimPlayer/grim, ~/.config/grimPlayer/grim.conf.
+    // Before 0.3.2 it was "grimPlayer"; that data is moved over once, on the first start.
+    {
+        const QString oldData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        const QString oldCache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        QApplication::setApplicationName(QStringLiteral("grim"));
+        UserDataMigration::moveFolder(oldData, QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+        UserDataMigration::moveFolder(oldCache, QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+        QSettings oldSettings(QStringLiteral("grimPlayer"), QStringLiteral("grimPlayer"));
+        QSettings newSettings;
+        UserDataMigration::moveSettings(oldSettings, newSettings);
+    }
+#endif
 #ifdef Q_OS_WIN
     {
         // Drop the emptied old registry key, but only if nothing else lives under "MusicPlayer"
@@ -125,6 +141,7 @@ int main(int argc, char *argv[])
     LibraryController library(settings, libraryData);
     PlaylistController playlists(libraryData, library);
     SlskdController slskd(settings);
+    SpotifyController spotify(library, playlists, slskd);
     QObject::connect(&slskd, &SlskdController::trackImported, &library, &LibraryController::addFile);
     slskd.setLibraryTracks([&library] { return library.tracks()->tracks(); });
     QObject::connect(&library, &LibraryController::aboutToDelete, &playerController, &PlayerController::releaseFiles);

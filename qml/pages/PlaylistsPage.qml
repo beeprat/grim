@@ -10,6 +10,9 @@ Item {
     // Main shows the new-playlist window.
     signal newPlaylistRequested()
 
+    // Delegates and the dialog below (in the overlay) can see ApplicationWindow.window as null.
+    readonly property var appWindow: ApplicationWindow.window
+
     function formatTime(ms) {
         const totalSeconds = Math.floor(ms / 1000)
         const seconds = totalSeconds % 60
@@ -229,6 +232,15 @@ Item {
                         }
                     }
                 }
+
+                // Spotify import, under the list.
+                IconButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: playlistsCard.compact
+                    iconName: "download"
+                    tip: qsTr("Import from Spotify")
+                    onClicked: spotifyDialog.openFresh()
+                }
             }
         }
 
@@ -278,7 +290,21 @@ Item {
                         Material.background: Theme.accent
                         Material.elevation: 0
                         opacity: enabled ? 1 : 0.4
-                        onClicked: PlayerController.playQueue(PlaylistController.currentUrls(), 0)
+                        onClicked: {
+                            PlayerController.shuffle = false
+                            PlayerController.playQueue(PlaylistController.currentUrls(), 0)
+                        }
+                    }
+
+                    IconButton {
+                        iconName: "shuffle"
+                        tip: qsTr("Shuffle play")
+                        enabled: trackList.count > 0
+                        onClicked: {
+                            const urls = PlaylistController.currentUrls()
+                            PlayerController.shuffle = true
+                            PlayerController.playQueue(urls, Math.floor(Math.random() * urls.length))
+                        }
                     }
                 }
 
@@ -313,7 +339,7 @@ Item {
 
                         TapHandler {
                             acceptedButtons: Qt.RightButton
-                            onTapped: ApplicationWindow.window.openTrackMenu([row.modelData.url])
+                            onTapped: page.appWindow.openTrackMenu([row.modelData.url])
                         }
 
                         background: Rectangle {
@@ -358,7 +384,7 @@ Item {
                                         enabled: row.modelData.artist !== ""
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: ApplicationWindow.window.showArtist(row.modelData.artist)
+                                        onClicked: page.appWindow.showArtist(row.modelData.artist)
                                     }
                                 }
                             }
@@ -381,7 +407,7 @@ Item {
                                     enabled: row.modelData.album !== ""
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: ApplicationWindow.window.showAlbumOf(row.modelData.url, true)
+                                    onClicked: page.appWindow.showAlbumOf(row.modelData.url, true)
                                 }
                             }
 
@@ -442,5 +468,271 @@ Item {
         height: row ? row.height : 0
         color: Theme.panel
         visible: row !== null && rowY >= listTop && rowY + height <= listTop + playlistList.height
+    }
+
+    // Paste a Spotify playlist or album link; the songs found in the library become a playlist.
+    Dialog {
+        id: spotifyDialog
+
+        function openFresh() {
+            SpotifyController.clearResult()
+            linkField.text = ""
+            open()
+            linkField.forceActiveFocus()
+        }
+
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(520, page.width - 40)
+        height: Math.min(implicitHeight, page.height - 40)
+        modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
+        title: qsTr("Import from Spotify")
+        standardButtons: Dialog.Close
+
+        Connections {
+            target: SpotifyController
+            function onLastImportChanged() {
+                const id = SpotifyController.lastImport.playlistId
+                if (id !== undefined && id > 0)
+                    PlaylistController.currentId = id
+            }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                TextField {
+                    id: linkField
+
+                    Layout.fillWidth: true
+                    selectByMouse: true
+                    placeholderText: qsTr("Playlist or album link")
+                    onAccepted: SpotifyController.importLink(text)
+                }
+
+                BusyIndicator {
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    visible: SpotifyController.busy
+                    running: visible
+                }
+
+                Button {
+                    text: qsTr("Import")
+                    enabled: linkField.text.trim() !== "" && !SpotifyController.busy
+                    onClicked: SpotifyController.importLink(linkField.text)
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: SpotifyController.errorText !== ""
+                wrapMode: Text.Wrap
+                text: SpotifyController.errorText
+                color: Material.color(Material.Red, Material.Shade300)
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: text !== ""
+                wrapMode: Text.Wrap
+                text: {
+                    const r = SpotifyController.lastImport
+                    if (r.name === undefined)
+                        return ""
+                    if (r.matched === 0)
+                        return qsTr("None of the %1 songs of \"%2\" are in your library.").arg(r.total).arg(r.name)
+                    return qsTr("%1 of %2 songs found: playlist \"%3\" saved.").arg(r.matched).arg(r.total).arg(r.name)
+                }
+            }
+
+            // Missing songs: fetch them from Soulseek, or look one up by hand.
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: (SpotifyController.lastImport.missing || []).length > 0 && downloadList.count === 0
+                spacing: 8
+
+                Label {
+                    text: qsTr("Not in your library: %1").arg((SpotifyController.lastImport.missing || []).length)
+                    font.weight: Font.DemiBold
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Label { text: qsTr("Look for"); opacity: 0.7 }
+
+                    CompactComboBox {
+                        id: searchFormatBox
+
+                        Layout.preferredWidth: 110
+                        textRole: "name"
+                        valueRole: "value"
+                        model: [
+                            { name: qsTr("Any"), value: "" },
+                            { name: "FLAC", value: "flac" },
+                            { name: "MP3", value: "mp3" },
+                        ]
+                        currentIndex: 1
+                    }
+
+                    Label { text: qsTr("Save as"); opacity: 0.7 }
+
+                    CompactComboBox {
+                        id: saveFormatBox
+
+                        Layout.preferredWidth: 140
+                        textRole: "name"
+                        valueRole: "value"
+                        model: [
+                            { name: qsTr("Keep original"), value: "original" },
+                            { name: "M4A (AAC)", value: "m4a" },
+                            { name: "MP3", value: "mp3" },
+                            { name: "FLAC", value: "flac" },
+                        ]
+                        currentIndex: Math.max(0, model.findIndex(f => f.value === SlskdController.downloadFormat))
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Button {
+                        text: qsTr("Download all")
+                        onClicked: SpotifyController.downloadMissing(searchFormatBox.currentValue, saveFormatBox.currentValue)
+                    }
+                }
+            }
+
+            ListView {
+                id: missingList
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: Math.min(contentHeight, 260)
+                visible: count > 0 && downloadList.count === 0
+                clip: true
+                model: SpotifyController.lastImport.missing || []
+                ScrollBar.vertical: SlimScrollBar {}
+
+                delegate: RowLayout {
+                    required property var modelData
+
+                    width: ListView.view.width - 10
+                    spacing: 8
+
+                    Label {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: modelData.artist + " – " + modelData.title
+                        opacity: 0.8
+                    }
+
+                    Button {
+                        flat: true
+                        enabled: page.appWindow && page.appWindow.slskdDetected
+                        text: qsTr("Search on Soulseek")
+                        onClicked: {
+                            SlskdController.search(modelData.artist.split(", ")[0] + " " + modelData.title)
+                            spotifyDialog.close()
+                            page.appWindow.page = 3
+                        }
+                    }
+                }
+            }
+
+            // Fetching from Soulseek: one row per song, with what is happening to it.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: downloadList.count > 0
+                spacing: 8
+
+                Label {
+                    Layout.fillWidth: true
+                    font.weight: Font.DemiBold
+                    text: SpotifyController.downloading
+                          ? qsTr("Downloading: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
+                          : qsTr("Done: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
+                }
+
+                Button {
+                    visible: SpotifyController.downloading
+                    flat: true
+                    text: qsTr("Stop")
+                    onClicked: SpotifyController.stopDownloads()
+                }
+            }
+
+            ListView {
+                id: downloadList
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: Math.min(contentHeight, 320)
+                visible: count > 0
+                clip: true
+                spacing: 2
+                model: SpotifyController.downloads
+                ScrollBar.vertical: SlimScrollBar {}
+
+                delegate: RowLayout {
+                    id: downloadRow
+
+                    required property int index
+                    required property string title
+                    required property string artist
+                    required property int stage
+                    required property string detail
+                    required property bool retryable
+
+                    width: ListView.view.width - 10
+                    spacing: 8
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: downloadRow.artist + " – " + downloadRow.title
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                            visible: text !== ""
+                            text: downloadRow.detail
+                            opacity: 0.55
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Label {
+                        text: [qsTr("Waiting"), qsTr("Searching"), qsTr("Queued"), qsTr("Downloading"), qsTr("Adding"),
+                               qsTr("Done"), qsTr("Not found"), qsTr("Failed")][downloadRow.stage]
+                        color: downloadRow.stage === PlaylistDownloadsModel.Done ? Theme.accent
+                             : downloadRow.stage >= PlaylistDownloadsModel.NotFound ? Material.color(Material.Red, Material.Shade300)
+                             : Material.foreground
+                        opacity: downloadRow.stage === PlaylistDownloadsModel.Waiting ? 0.5 : 0.9
+                        font.pixelSize: 12
+                    }
+
+                    Button {
+                        visible: downloadRow.retryable
+                        flat: true
+                        // A finished song may be the wrong file: get the next result instead.
+                        text: downloadRow.stage === PlaylistDownloadsModel.Done ? qsTr("Wrong song") : qsTr("Retry")
+                        onClicked: SpotifyController.retry(downloadRow.index)
+                    }
+                }
+            }
+        }
     }
 }

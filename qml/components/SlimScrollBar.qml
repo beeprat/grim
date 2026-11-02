@@ -8,9 +8,10 @@ ScrollBar {
     id: bar
 
     implicitWidth: 8
+    implicitHeight: 8
     padding: 2
     minimumSize: 0.05
-    background: null
+    background: Item {} // Material animates the background's opacity: an empty Item, not null
 
     contentItem: Rectangle {
         implicitWidth: 4

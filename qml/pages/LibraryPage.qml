@@ -252,6 +252,8 @@ Item {
         property string primary
         property string secondary
         property string tertiary
+        // Track rows: the artist at the start of `secondary`, shown as a link to the artist page.
+        property string secondaryLink
         property string trailing
         // Set for track rows: shows stars and the heart.
         property url trackUrl
@@ -264,6 +266,7 @@ Item {
         signal contextMenu()
         // The album name (tertiary) was clicked.
         signal tertiaryClicked()
+        signal secondaryClicked()
 
         height: cover !== "" ? 56 : 48
         // Equal side gaps between the highlight's edges and the first/last element.
@@ -335,12 +338,42 @@ Item {
                 }
 
                 Label {
+                    id: secondaryLabel
+
                     Layout.fillWidth: true
                     visible: text !== "" // genre rows have one line, centered like the rest
                     text: row.secondary
                     elide: Text.ElideRight
-                    opacity: 0.6
+                    // The link part lights up on its own; the rest stays dim.
+                    opacity: artistMouse.containsMouse ? 0.9 : 0.6
                     font.pixelSize: 12
+
+                    TextMetrics {
+                        id: artistMetrics
+
+                        font: secondaryLabel.font
+                        text: row.secondaryLink
+                    }
+
+                    // Underline under the artist only.
+                    Rectangle {
+                        visible: artistMouse.containsMouse
+                        y: parent.baselineOffset + 2
+                        width: artistMouse.width
+                        height: 1
+                        color: parent.color
+                    }
+
+                    MouseArea {
+                        id: artistMouse
+
+                        width: Math.min(artistMetrics.advanceWidth, parent.width)
+                        height: parent.height
+                        enabled: row.secondaryLink !== ""
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: row.secondaryClicked()
+                    }
                 }
             }
 
@@ -780,6 +813,28 @@ Item {
                                     font.pixelSize: 15
                                 }
                             }
+
+                            RoundButton {
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 32
+                                width: 56
+                                height: 56
+                                display: AbstractButton.IconOnly
+                                icon.source: "../icons/shuffle.svg"
+                                icon.width: 26
+                                icon.height: 26
+                                icon.color: Theme.window
+                                Material.background: Theme.accent
+                                Material.elevation: 0
+                                onClicked: {
+                                    const urls = LibraryController.albums.allUrls()
+                                    if (urls.length === 0)
+                                        return
+                                    PlayerController.shuffle = true
+                                    PlayerController.playQueue(urls, Math.floor(Math.random() * urls.length))
+                                }
+                            }
                         }
                     }
                 }
@@ -861,6 +916,9 @@ Item {
                     primary: title
                     // Rating is already shown as stars on the row.
                     secondary: page.albumSubtitle(artist, year, genre, 0, viewSettings.trackSort)
+                    // Not on the artist page itself.
+                    secondaryLink: LibraryController.artistFilter !== "" ? "" : artist
+                    onSecondaryClicked: page.showArtist(artist)
                     tertiary: album
                     onTertiaryClicked: page.openAlbumOf(url, true)
                     trailing: durationMs > 0 ? page.formatTime(durationMs) : ""
@@ -952,9 +1010,16 @@ Item {
                             Layout.topMargin: 8
                             spacing: 8
 
-                            AccentButton {
-                                implicitWidth: 56
-                                text: "▶"
+                            RoundButton {
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 48
+                                display: AbstractButton.IconOnly
+                                icon.source: "../icons/play.svg"
+                                icon.width: 26
+                                icon.height: 26
+                                icon.color: Theme.window
+                                Material.background: Theme.accent
+                                Material.elevation: 0
                                 onClicked: {
                                     PlayerController.shuffle = false
                                     page.playAlbum(0)

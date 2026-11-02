@@ -641,6 +641,11 @@ Item {
                     SectionTitle { text: qsTr("Soulseek") }
 
                     // Only the Soulseek login: grim. downloads and runs slskd itself.
+                    Hint {
+                        visible: !SlskdController.managed
+                        text: qsTr("No account needed beforehand: pick any username and password and press Connect. Soulseek makes the account the first time you log in. Already have one? Use it.")
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -649,7 +654,7 @@ Item {
                             id: userField
 
                             Layout.preferredWidth: 200
-                            placeholderText: qsTr("Soulseek username")
+                            placeholderText: SlskdController.managed ? qsTr("Soulseek username") : qsTr("Pick a username")
                             text: SlskdController.username
                             onAccepted: if (saveLogin.enabled) saveLogin.clicked()
                         }
@@ -659,7 +664,7 @@ Item {
 
                             Layout.fillWidth: true
                             // Never shown back: an empty field keeps the stored password.
-                            placeholderText: SlskdController.managed ? qsTr("Password (saved)") : qsTr("Password")
+                            placeholderText: SlskdController.managed ? qsTr("Password (saved)") : qsTr("Pick a password")
                             echoMode: TextInput.Password
                             // Enter = the button.
                             onAccepted: if (saveLogin.enabled) saveLogin.clicked()
@@ -668,7 +673,7 @@ Item {
                         Button {
                             id: saveLogin
 
-                            text: SlskdController.managed ? qsTr("Save") : qsTr("Start")
+                            text: SlskdController.managed ? qsTr("Save") : qsTr("Connect")
                             enabled: !SlskdController.managedBusy && userField.text.trim() !== ""
                                      && (SlskdController.managed ? userField.text !== SlskdController.username || passwordField.text !== ""
                                                                  : passwordField.text !== "")

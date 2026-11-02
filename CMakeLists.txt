@@ -97,6 +97,10 @@ add_library(musicplayer_core STATIC
     src/core/LyricsFetcher.cpp
     src/core/ArtistImageFetcher.h
     src/core/ArtistImageFetcher.cpp
+    src/core/TrackPicker.h
+    src/core/TrackPicker.cpp
+    src/core/SpotifyMatch.h
+    src/core/SpotifyMatch.cpp
     src/core/LastFmClient.h
     src/core/LastFmClient.cpp
     src/core/DiscordIpc.h
@@ -187,6 +191,8 @@ qt_add_qml_module(MusicPlayer
         src/controllers/PlaylistController.cpp
         src/controllers/SettingsController.h
         src/controllers/SettingsController.cpp
+        src/controllers/SpotifyController.h
+        src/controllers/SpotifyController.cpp
         src/controllers/LastFmController.h
         src/controllers/LastFmController.cpp
         src/controllers/DiscordController.h
@@ -207,6 +213,8 @@ qt_add_qml_module(MusicPlayer
         src/providers/SearchGroupsModel.cpp
         src/providers/SearchResultsModel.h
         src/providers/SearchResultsModel.cpp
+        src/providers/PlaylistDownloadsModel.h
+        src/providers/PlaylistDownloadsModel.cpp
         src/providers/StatsListModel.h
         src/providers/StatsListModel.cpp
     QML_FILES
@@ -340,6 +348,14 @@ if(WIN32)
 endif()
 
 enable_testing()
+
+qt_add_executable(tst_trackpicker tests/tst_trackpicker.cpp)
+target_link_libraries(tst_trackpicker PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_trackpicker COMMAND tst_trackpicker)
+
+qt_add_executable(tst_spotifymatch tests/tst_spotifymatch.cpp)
+target_link_libraries(tst_spotifymatch PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_spotifymatch COMMAND tst_spotifymatch)
 
 qt_add_executable(tst_equalizer tests/tst_equalizer.cpp)
 target_link_libraries(tst_equalizer PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)

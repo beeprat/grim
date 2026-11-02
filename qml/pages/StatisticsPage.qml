@@ -99,12 +99,6 @@ Item {
             // Clicking jumps to the library: a track's album (with the track flashing),
             // an artist's albums, or an album.
             RankedList {
-                title: qsTr("Top tracks")
-                listModel: StatsController.topTracks
-                onEntryClicked: (fileUrl) => ApplicationWindow.window.showAlbumOf(fileUrl, true)
-            }
-
-            RankedList {
                 title: qsTr("Top artists")
                 listModel: StatsController.topArtists
                 onEntryClicked: (fileUrl, name) => ApplicationWindow.window.showArtist(name)
@@ -114,6 +108,12 @@ Item {
                 title: qsTr("Top albums")
                 listModel: StatsController.topAlbums
                 onEntryClicked: (fileUrl) => ApplicationWindow.window.showAlbumOf(fileUrl, false)
+            }
+
+            RankedList {
+                title: qsTr("Top tracks")
+                listModel: StatsController.topTracks
+                onEntryClicked: (fileUrl) => ApplicationWindow.window.showAlbumOf(fileUrl, true)
             }
         }
     }

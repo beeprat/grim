@@ -8,3 +8,4 @@ Icon=grim
 Terminal=false
 Categories=AudioVideo;Audio;Player;
 MimeType=audio/flac;audio/mpeg;audio/x-wav;audio/wav;audio/mp4;audio/x-m4a;audio/aac;
+StartupWMClass=grim

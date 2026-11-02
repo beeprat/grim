@@ -113,6 +113,12 @@ public:
     // Stops one running download; it stays listed as cancelled until cleared.
     Q_INVOKABLE void cancelDownload(int row);
 
+    // For batch downloads (SpotifyController), apart from the Soulseek page's search: one search,
+    // its results once it is complete (or after kBatchSearchMs). Empty list on failure.
+    void searchFiles(const QString &text, std::function<void(QList<SlskdSearchFile>)> onFiles);
+    // Queues one file; transfersUpdated and downloadImported follow it.
+    void enqueueFile(const SlskdSearchFile &file);
+
 signals:
     void settingsChanged();
     void managedStatusChanged();
@@ -122,6 +128,11 @@ signals:
     void errorTextChanged();
     // A converted download now sits in the library folder at `path`.
     void trackImported(const QString &path);
+    // The same, with the slskd download it came from; or why it did not get there.
+    void downloadImported(const QString &downloadId, const QString &path);
+    void downloadImportFailed(const QString &downloadId, const QString &reason);
+    // Every refresh of slskd's transfer list.
+    void transfersUpdated(const QList<SlskdDownload> &downloads);
 
 private:
     void pollSearch();
@@ -135,6 +146,9 @@ private:
     // Queues every newly succeeded, not-yet-handled download for conversion.
     void convertFinished(const QList<SlskdDownload> &downloads);
     void importToLibrary(const QString &path, const QString &downloadId, const QString &doneNote);
+    // searchFiles(): starts the queued searches one at a time (slskd answers 429 to overlapping starts).
+    void startNextBatchSearch();
+    void collectBatchSearch(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles);
 
     static inline SlskdController *s_instance = nullptr;
     SettingsController &m_settings;
@@ -159,6 +173,15 @@ private:
     QString m_downloadsDirectory;           // local folder slskd moves finished files to
     QSet<QString> m_handledDownloads;       // download ids already sent to (or skipped by) conversion
     QHash<QString, QString> m_conversions;  // source path -> download id
+
+    struct BatchSearch
+    {
+        QString text;
+        std::function<void(QList<SlskdSearchFile>)> onFiles;
+        int attempts = 0;
+    };
+    QList<BatchSearch> m_batchSearches; // waiting to start
+    bool m_batchStarting = false;
 
     QString m_downloadFormat;
     QString m_searchId; // current search; replies for older searches are dropped

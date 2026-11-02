@@ -14,6 +14,7 @@
 #include <QJSEngine>
 #include <QRandomGenerator>
 #include <QSettings>
+#include <QPointer>
 #include <QTimer>
 
 using namespace Qt::StringLiterals;
@@ -30,6 +31,14 @@ constexpr int kManagedStartupChecks = 20;
 
 const auto kDownloadFormatKey = "slskd/downloadFormat"_L1;
 const auto kOriginalFormat = "original"_L1;
+// searchFiles(): slskd's search timeout (time without new responses), the poll interval, and when a
+// running search is stopped so its responses can be read (slskd lists them only once complete):
+// after kBatchSearchMs of running, or kBatchSearchEnoughMs with kBatchSearchEnough responses.
+constexpr int kBatchSearchTimeoutMs = 8000;
+constexpr int kBatchSearchPollMs = 1500;
+constexpr int kBatchSearchMs = 20000;
+constexpr int kBatchSearchEnoughMs = 8000;
+constexpr int kBatchSearchEnough = 60;
 const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
 const auto kStoppedKey = "slskd/stopped"_L1;
@@ -97,6 +106,7 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
                 const QString downloadId = m_conversions.take(source);
                 if (!ok) {
                     m_downloads->setNote(downloadId, tr("Conversion failed: %1").arg(error));
+                    emit downloadImportFailed(downloadId, tr("Conversion failed: %1").arg(error));
                     return;
                 }
                 // Recycle Bin rather than a hard delete, so a bad conversion is recoverable.
@@ -271,7 +281,7 @@ QString SlskdController::managedStatus() const
     switch (m_runner->state()) {
     case SlskdRunner::NotInstalled:
         if (!managed())
-            return tr("Enter your Soulseek username and password.");
+            return tr("Not connected yet.");
         return tr("slskd %1 will be downloaded from GitHub (about 55 MB).").arg(QLatin1StringView(SlskdRunner::kVersion));
     case SlskdRunner::Downloading:
         return tr("Downloading slskd… %1 %").arg(qRound(m_runner->progress() * 100));
@@ -286,7 +296,7 @@ QString SlskdController::managedStatus() const
     case Online:
         return tr("Running, logged in to Soulseek as %1").arg(m_username);
     case NotLoggedIn:
-        return tr("Running, but not logged in to Soulseek: check the username and password");
+        return tr("Not logged in to Soulseek: that username is taken by someone else, or the password is wrong. Try another username.");
     case Checking:
     case Offline:
     case AuthRequired:
@@ -490,6 +500,8 @@ void SlskdController::refreshDownloads()
     if (m_status != Online && m_status != NotLoggedIn)
         return;
     m_client->fetchDownloads([this](QList<SlskdDownload> downloads) {
+        // Listeners learn the download ids first: "Keep original" imports inside convertFinished.
+        emit transfersUpdated(downloads);
         convertFinished(downloads);
         m_downloads->setDownloads(std::move(downloads));
         // Keep polling only while something is still moving.
@@ -528,6 +540,7 @@ void SlskdController::convertFinished(const QList<SlskdDownload> &downloads)
         if (found == byName.cend()) {
             // Also the case for downloads already moved into the library in an earlier session.
             m_downloads->setNote(download->id, tr("Not in slskd's downloads folder"));
+            emit downloadImportFailed(download->id, tr("Not in slskd's downloads folder"));
             continue;
         }
         // Kept as downloaded: "original" chosen, or already in the chosen format (no re-encode).
@@ -576,10 +589,12 @@ void SlskdController::importToLibrary(const QString &path, const QString &downlo
                               : LibraryFiles::moveIntoLibrary(source, m_downloadsDirectory, m_settings.libraryFolder(), &error);
     if (moved.isEmpty()) {
         m_downloads->setNote(downloadId, tr("Not added to the library: %1").arg(error));
+        emit downloadImportFailed(downloadId, tr("Not added to the library: %1").arg(error));
         return;
     }
     m_downloads->setNote(downloadId, doneNote);
     emit trackImported(moved);
+    emit downloadImported(downloadId, moved);
 }
 
 void SlskdController::clearFinishedDownloads()
@@ -602,4 +617,97 @@ void SlskdController::setErrorText(const QString &text)
         return;
     m_errorText = text;
     emit errorTextChanged();
+}
+
+void SlskdController::searchFiles(const QString &text, std::function<void(QList<SlskdSearchFile>)> onFiles)
+{
+    if (m_status != Online) {
+        onFiles({});
+        return;
+    }
+    m_batchSearches.append({text, std::move(onFiles), 0});
+    startNextBatchSearch();
+}
+
+void SlskdController::startNextBatchSearch()
+{
+    if (m_batchStarting || m_batchSearches.isEmpty())
+        return;
+    m_batchStarting = true;
+    BatchSearch next = m_batchSearches.takeFirst();
+    m_client->startSearch(
+        next.text,
+        [this, onFiles = next.onFiles](const QString &searchId) {
+            m_batchStarting = false;
+            startNextBatchSearch();
+            collectBatchSearch(searchId, onFiles);
+        },
+        kBatchSearchTimeoutMs,
+        [this, next](int status) mutable {
+            m_batchStarting = false;
+            // Busy: try again shortly, behind the others.
+            if (status == 429 && ++next.attempts < 10) {
+                m_batchSearches.append(next);
+                QTimer::singleShot(1000, this, &SlskdController::startNextBatchSearch);
+                return;
+            }
+            qWarning() << "SlskdController: batch search did not start, HTTP" << status;
+            next.onFiles({});
+            startNextBatchSearch();
+        });
+}
+
+void SlskdController::collectBatchSearch(const QString &searchId, std::function<void(QList<SlskdSearchFile>)> onFiles)
+{
+    // Polls until slskd calls the search complete (it lists the responses only then), at most
+    // kBatchSearchMs. A complete search with responses but an empty list is read again once: the
+    // responses are stored a moment after the state changes.
+    QPointer<QTimer> timer = new QTimer(this);
+    timer->setInterval(kBatchSearchPollMs);
+    const auto finish = [this, searchId, onFiles, timer](int responseCount) {
+        if (!timer || !timer->isActive())
+            return; // already finished
+        timer->stop();
+        timer->deleteLater();
+        const auto read = [this, searchId, onFiles](bool again, auto &self) -> void {
+            m_client->fetchSearchResponses(
+                searchId,
+                [this, onFiles, again, self](QList<SlskdSearchFile> files) {
+                    if (files.isEmpty() && again) {
+                        QTimer::singleShot(2000, this, [self] { self(false, self); });
+                        return;
+                    }
+                    onFiles(std::move(files));
+                },
+                [onFiles](int) { onFiles({}); });
+        };
+        read(responseCount > 0, read);
+    };
+    connect(timer, &QTimer::timeout, this, [this, searchId, timer, finish] {
+        m_client->fetchSearchState(searchId, [this, searchId, timer, finish](const QString &state, int responseCount) {
+            if (!timer || !timer->isActive())
+                return;
+            if (Slskd::isSearchComplete(state)) {
+                finish(responseCount);
+                return;
+            }
+            // Time counts only while running: slskd queues searches beyond a few at once.
+            if (!state.contains(u"InProgress"_s))
+                return;
+            const int running = timer->property("running").toInt() + kBatchSearchPollMs;
+            timer->setProperty("running", running);
+            if (running >= kBatchSearchMs || (running >= kBatchSearchEnoughMs && responseCount >= kBatchSearchEnough)) {
+                if (!timer->property("stopping").toBool()) {
+                    timer->setProperty("stopping", true);
+                    m_client->stopSearch(searchId, [] {}); // the next poll sees it complete
+                }
+            }
+        });
+    });
+    timer->start();
+}
+
+void SlskdController::enqueueFile(const SlskdSearchFile &file)
+{
+    m_client->enqueueDownloads({file}, [this] { refreshDownloads(); });
 }
