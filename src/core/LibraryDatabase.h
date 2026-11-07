@@ -40,6 +40,9 @@ public:
     std::optional<double> replayGainDb(const QString &path) const;
     bool setReplayGainDb(const QString &path, std::optional<double> db);
 
+    // Every song with a rating, favorite or volume adjustment stored.
+    QStringList metaPaths() const;
+
     QList<Playlist> playlists() const; // by name
     qint64 createPlaylist(const QString &name, const QStringList &paths); // 0 on failure
     bool renamePlaylist(qint64 id, const QString &name);

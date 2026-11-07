@@ -248,6 +248,8 @@ void DiscordController::publish()
     QJsonObject assets;
     if (!m_coverUrl.isEmpty())
         assets.insert("large_image"_L1, m_coverUrl);
+    // Clicking the cover in Discord opens grim.'s GitHub page.
+    assets.insert("large_url"_L1, "https://github.com/beeprat/grim"_L1);
     if (!m_player.album().isEmpty())
         assets.insert("large_text"_L1, fit(m_player.album()));
     if (!assets.isEmpty())

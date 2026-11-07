@@ -11,10 +11,13 @@ Item {
     property Flickable flickable
     property real topHeight: 28
     property real bottomHeight: 100
+    // Fades the left (top*) and right (bottom*) edges instead, for a sideways list.
+    property bool horizontal: false
+    readonly property real length: horizontal ? width : height
 
     // 1 = no fade at that edge (the list is at that end, so the first/last row shows in full).
-    property real topAlpha: flickable && !flickable.atYBeginning ? 0 : 1
-    property real bottomAlpha: flickable && !flickable.atYEnd ? 0 : 1
+    property real topAlpha: flickable && !(horizontal ? flickable.atXBeginning : flickable.atYBeginning) ? 0 : 1
+    property real bottomAlpha: flickable && !(horizontal ? flickable.atXEnd : flickable.atYEnd) ? 0 : 1
     Behavior on topAlpha { NumberAnimation { duration: 150 } }
     Behavior on bottomAlpha { NumberAnimation { duration: 150 } }
 
@@ -26,9 +29,10 @@ Item {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
+            orientation: fade.horizontal ? Gradient.Horizontal : Gradient.Vertical
             GradientStop { position: 0; color: Qt.rgba(1, 1, 1, fade.topAlpha) }
-            GradientStop { position: Math.min(0.5, fade.topHeight / Math.max(1, fade.height)); color: "white" }
-            GradientStop { position: Math.max(0.5, 1 - fade.bottomHeight / Math.max(1, fade.height)); color: "white" }
+            GradientStop { position: Math.min(0.5, fade.topHeight / Math.max(1, fade.length)); color: "white" }
+            GradientStop { position: Math.max(0.5, 1 - fade.bottomHeight / Math.max(1, fade.length)); color: "white" }
             GradientStop { position: 1; color: Qt.rgba(1, 1, 1, fade.bottomAlpha) }
         }
     }

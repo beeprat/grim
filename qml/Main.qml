@@ -10,8 +10,8 @@ import MusicPlayer
 ApplicationWindow {
     id: root
 
-    // Index of the page in the StackLayout: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings.
-    property int page: 0
+    // Index of the page in the StackLayout: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings, 5 Home.
+    property int page: 5
     // slskd answered (logged in or not, or asking for an API key); the Soulseek page needs it.
     readonly property bool slskdDetected: SlskdController.status !== SlskdController.Offline
                                           && SlskdController.status !== SlskdController.Checking
@@ -60,6 +60,65 @@ ApplicationWindow {
         target: PlayerController
         property: "lyricsShown"
         value: root.lyricsVisible && root.visibility !== Window.Hidden && root.visibility !== Window.Minimized
+    }
+
+    // Statistics milestones: medal sets, each tier won once its value reaches it. Newly won medals show in
+    // the toast; the count already announced per set is remembered so a restart doesn't repeat them.
+    readonly property var medalSets: [
+        { key: "listenTime", name: qsTr("Listening time"), tiers: [24, 50, 100, 150, 250] },
+        { key: "librarySize", name: qsTr("Library size"), tiers: [100, 250, 500, 1000, 2000] }
+    ]
+
+    function medalValue(set) {
+        return set.key === "listenTime" ? StatsController.allTimeListenedMs / 3600000 : LibraryController.tracks.count
+    }
+
+    function medalsWon(set) {
+        const value = medalValue(set)
+        return set.tiers.filter(t => value >= t).length
+    }
+
+    function medalLabel(set, i) {
+        return set.key === "listenTime" ? qsTr("%1h").arg(set.tiers[i])
+                                       : Number(set.tiers[i]).toLocaleString(Qt.locale(), "f", 0)
+    }
+
+    function medalGoal(set, i) {
+        return set.key === "listenTime"
+               ? qsTr("Listen to %1 hours of music").arg(set.tiers[i])
+               : qsTr("Have %1 songs in your library").arg(Number(set.tiers[i]).toLocaleString(Qt.locale(), "f", 0))
+    }
+
+    Settings {
+        id: medalSettings
+
+        category: "milestones"
+        property int listenTime: -1 // medals announced; -1 = not yet counted (key renamed when tiers changed)
+        property int librarySize: -1
+    }
+
+    // shortcut: listening time only updates when StatsController refreshes (Home, Statistics), so a listening
+    // medal can toast late; call refresh on track change if that matters.
+    function checkMedals() {
+        for (const set of medalSets) {
+            if (medalValue(set) <= 0)
+                continue // not loaded yet: counting now would announce every medal on the first load
+            const won = medalsWon(set)
+            const announced = medalSettings[set.key]
+            if (announced >= 0 && won > announced)
+                toast.show(qsTr("Medal unlocked: %1").arg(medalGoal(set, won - 1)))
+            if (won > announced)
+                medalSettings[set.key] = won // never lowered, so losing songs and re-adding them stays quiet
+        }
+    }
+
+    Connections {
+        target: StatsController
+        function onTotalsChanged() { root.checkMedals() }
+    }
+    Connections {
+        target: LibraryController.tracks
+        function onCountChanged() { root.checkMedals() }
     }
 
     Settings {
@@ -434,7 +493,16 @@ ApplicationWindow {
     // it, then rating (52 px), volume (52 px) and controls (64 px, level with the seek bar).
     // The arranged layout is for the Library page only; every other page keeps the classic layout.
     readonly property bool classicLayout: layoutSettings.grid === "" || page !== 0
-    onPageChanged: if (page !== 0) editLayout = false
+    onPageChanged: {
+        if (page !== 0)
+            editLayout = false
+        // A genre opened from Statistics is a detour: leaving the library drops it.
+        if (page !== 0 && libraryPage.statsGenre !== "") {
+            if (LibraryController.genreFilter === libraryPage.statsGenre)
+                LibraryController.genreFilter = ""
+            libraryPage.statsGenre = ""
+        }
+    }
     Connections {
         target: Theme
         function onArrangePanelsChanged() { if (!Theme.arrangePanels) root.editLayout = false }
@@ -786,6 +854,12 @@ ApplicationWindow {
     function showAlbumOf(fileUrl, highlightTrack) {
         root.page = 0
         libraryPage.openAlbumOf(fileUrl, highlightTrack === true)
+    }
+
+    function showGenre(key) {
+        root.page = 0
+        libraryPage.showGenre(key)
+        libraryPage.statsGenre = key // only Statistics opens genres this way
     }
 
     function showArtist(name) {
@@ -1235,6 +1309,140 @@ ApplicationWindow {
         }
     }
 
+    // Top-of-window notice when a download lands in the library (a song) or a Spotify batch ends (an album or
+    // playlist). A new one replaces the one shown.
+    Popup {
+        id: toast
+
+        function show(text) {
+            toastLabel.text = text
+            open()
+            toastTimer.restart()
+        }
+
+        x: Math.round((root.width - width) / 2)
+        y: titleBar.height + 8
+        width: Math.min(toastLabel.implicitWidth + leftPadding + rightPadding, root.width - 40)
+        padding: 12
+        leftPadding: 18
+        rightPadding: 18
+        closePolicy: Popup.NoAutoClose
+        background: Rectangle {
+            radius: Theme.radius
+            color: Theme.card
+            border.color: Theme.subtle
+        }
+        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150 } }
+        exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 300 } }
+
+        Label {
+            id: toastLabel
+
+            width: parent.width
+            elide: Text.ElideRight
+        }
+        Timer {
+            id: toastTimer
+
+            interval: 4000
+            onTriggered: toast.close()
+        }
+        Connections {
+            target: SlskdController
+            function onSongAdded(artist, title) {
+                toast.show(artist !== "" ? qsTr("Added to your library: %1 – %2").arg(artist).arg(title)
+                                         : qsTr("Added to your library: %1").arg(title))
+            }
+        }
+        Connections {
+            target: SpotifyController
+            property bool wasDownloading: false
+            function onDownloadingChanged() {
+                if (wasDownloading && !SpotifyController.downloading)
+                    toast.show(qsTr("\"%1\" is complete: %2 of %3 songs added")
+                               .arg(SpotifyController.lastImport.name ?? "")
+                               .arg(SpotifyController.downloadedCount)
+                               .arg(SpotifyController.downloads.rowCount()))
+                wasDownloading = SpotifyController.downloading
+            }
+        }
+    }
+
+    // Answer to "Find cover online" (LibraryController.findCover).
+    Dialog {
+        id: coverResultDialog
+
+        property int added: 0
+
+        Connections {
+            target: LibraryController
+            function onCoverSearchFinished(added) {
+                coverResultDialog.added = added
+                coverResultDialog.open()
+            }
+        }
+
+        anchors.centerIn: Overlay.overlay
+        width: 360
+        modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
+        title: qsTr("Find cover online")
+        standardButtons: Dialog.Ok
+
+        Label {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: coverResultDialog.added > 0
+                  ? qsTr("Cover added to %1 songs.").arg(coverResultDialog.added)
+                  : qsTr("No cover added: none was found for this album's artist and name, or every song already has one.")
+        }
+    }
+
+    // A download should be converted but ffmpeg is missing (SlskdController.ffmpegNeeded).
+    Dialog {
+        id: ffmpegDialog
+
+        Connections {
+            target: SlskdController
+            function onFfmpegNeeded() { ffmpegDialog.open() }
+        }
+
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
+        title: qsTr("ffmpeg needed")
+        footer: DialogButtonBox {
+            Button {
+                text: SlskdController.canDownloadFfmpeg ? qsTr("Download ffmpeg") : qsTr("Try again")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+            }
+            Button {
+                text: qsTr("Keep original")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            }
+        }
+        onAccepted: SlskdController.installFfmpeg()
+        onRejected: SlskdController.keepOriginals()
+
+        Label {
+            width: parent.width
+            wrapMode: Text.Wrap
+            text: (SlskdController.errorText !== "" ? SlskdController.errorText + "
+
+" : "")
+                  + (SlskdController.canDownloadFfmpeg
+                     ? qsTr("Converting downloads needs ffmpeg. Download it now (about 110 MB)? grim. keeps its own copy; nothing else on your computer changes.")
+                     : qsTr("Converting downloads needs ffmpeg. Install it from your system's packages (for example: sudo apt install ffmpeg), then press Try again."))
+                  + " " + qsTr("Keep original adds the downloads as they are.")
+        }
+    }
+
     NewPlaylistWindow {
         id: newPlaylistWindow
 
@@ -1282,6 +1490,8 @@ ApplicationWindow {
                             anchors.fill: parent
                             anchors.margins: 8
                             spacing: 4
+
+                            NavButton { page: 5; text: qsTr("Home"); icon.source: "icons/home.svg" }
 
                             // While an album or artist is open it is the way back (same as Escape): album to
                             // the grid it came from, artist to the whole library.
@@ -1467,6 +1677,9 @@ ApplicationWindow {
                                     pageIndex: 4
                                     sourceComponent: SettingsPage {}
                                 }
+
+                                // The start page, so built right away.
+                                HomePage {}
                             }
                         }
 

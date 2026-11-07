@@ -5,6 +5,8 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QList>
+#include <QPair>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QString>
 
@@ -58,10 +60,19 @@ public:
     // Only sessions passing countsAsPlay() add to play counts.
     bool recordPlay(const Track &track, const QDateTime &startedAt, qint64 listenedMs, qint64 *playId = nullptr);
 
-    StatsTotals totals() const;
-    QList<TrackStat> topTracks(int limit) const;
-    QList<ArtistStat> topArtists(int limit) const;
-    QList<AlbumStat> topAlbums(int limit) const;
+    // `since` (epoch s): only sessions started then or later; 0 is all time.
+    StatsTotals totals(qint64 since = 0) const;
+    QList<TrackStat> topTracks(int limit, qint64 since = 0) const;
+    QList<ArtistStat> topArtists(int limit, qint64 since = 0) const;
+    // byRecent: last played first instead of most listened.
+    QList<AlbumStat> topAlbums(int limit, bool byRecent = false, qint64 since = 0) const;
+    // Time listened per track file: (path, ms).
+    QList<QPair<QString, qint64>> listenedByPath(qint64 since = 0) const;
+    // Time listened per day: (day number since the epoch, ms), oldest first, days without
+    // listening left out. utcOffsetSecs moves day boundaries to local midnight.
+    QList<QPair<qint64, qint64>> listenedByDay(qint64 since, int utcOffsetSecs) const;
+    // Every album with any listening, as album, a newline, then artist.
+    QSet<QString> playedAlbums() const;
     // One artist's totals, name matched ignoring case.
     ArtistStat artistStat(const QString &artist) const;
 

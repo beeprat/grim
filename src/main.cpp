@@ -16,6 +16,7 @@
 #include "controllers/UpdateController.h"
 #include "controllers/WindowFrame.h"
 #include "core/LibraryDatabase.h"
+#include "core/LibrarySidecar.h"
 #include "core/StatsDatabase.h"
 #include "core/UserDataMigration.h"
 #include "providers/CoverImageProvider.h"
@@ -31,6 +32,7 @@
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTimer>
 
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -136,13 +138,35 @@ int main(int argc, char *argv[])
 
     // Declared before the engine so they outlive every QML binding that reads them.
     SettingsController settings(nullptr);
+    // What a backup of the music folder carried over (another computer's ratings, favorites, playlists).
+    LibrarySidecar::read(libraryData, settings.libraryFolder());
     StatsController statsController(stats);
     PlayerController playerController(stats);
     LibraryController library(settings, libraryData);
+    statsController.setGenreLookup([&library](const QString &path) {
+        const Track *track = library.findTrack(path);
+        return track ? track->genre : QString();
+    });
     PlaylistController playlists(libraryData, library);
+    // Keeps .grim-library.json in the music folder up to date, a moment after each change and on quit.
+    QTimer sidecarWrite;
+    sidecarWrite.setSingleShot(true);
+    sidecarWrite.setInterval(2000);
+    QObject::connect(&sidecarWrite, &QTimer::timeout, [&] { LibrarySidecar::write(libraryData, settings.libraryFolder()); });
+    QObject::connect(&library, &LibraryController::metaChanged, &sidecarWrite, qOverload<>(&QTimer::start));
+    QObject::connect(&playlists, &PlaylistController::playlistsChanged, &sidecarWrite, qOverload<>(&QTimer::start));
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [&] {
+        if (sidecarWrite.isActive())
+            LibrarySidecar::write(libraryData, settings.libraryFolder());
+    });
+    QObject::connect(&settings, &SettingsController::libraryFolderChanged, &library, [&] {
+        if (LibrarySidecar::read(libraryData, settings.libraryFolder()))
+            emit library.metaChanged();
+    });
     SlskdController slskd(settings);
     SpotifyController spotify(library, playlists, slskd);
     QObject::connect(&slskd, &SlskdController::trackImported, &library, &LibraryController::addFile);
+    QObject::connect(&slskd, &SlskdController::trackImported, &library, &LibraryController::addUnseen);
     slskd.setLibraryTracks([&library] { return library.tracks()->tracks(); });
     QObject::connect(&library, &LibraryController::aboutToDelete, &playerController, &PlayerController::releaseFiles);
     TrayController tray(settings, playerController, appIcon);

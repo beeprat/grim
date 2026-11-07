@@ -13,7 +13,8 @@
 namespace DownloadTagger {
 
 // Drops edition notes from a song title: "Help! (Remastered 2009)", "Help! [Deluxe Edition]", "(50th Anniversary)",
-// "Help! - Remastered 2009", "Help! - 2015 Remaster" all give "Help!". Other brackets stay ("(Live)").
+// "Help! - Remastered 2009", "Help! - 2015 Remaster", "(Special Edition)" all give "Help!". Other brackets stay
+// ("(Live)"). TagReader applies it to every title and album name read.
 QString cleanTitle(const QString &title);
 
 // Drops a leading track number from a file name ("01 Help!.m4a", "01 - Help!.m4a", "1-01. Help!.m4a" give

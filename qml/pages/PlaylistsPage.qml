@@ -2,6 +2,7 @@ import QtCore
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import QtQuick.Shapes
 import MusicPlayer
 
 Item {
@@ -35,6 +36,9 @@ Item {
 
         anchors.centerIn: Overlay.overlay
         modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
         title: qsTr("Rename playlist")
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: PlaylistController.renamePlaylist(playlistId, renameField.text)
@@ -55,6 +59,9 @@ Item {
 
         anchors.centerIn: Overlay.overlay
         modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.6)
+        }
         title: qsTr("Delete playlist")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: PlaylistController.deletePlaylist(playlistId)
@@ -233,13 +240,55 @@ Item {
                     }
                 }
 
-                // Spotify import, under the list.
+                // Spotify import, under the list. While its songs download it becomes a progress ring
+                // with the share added; clicking shows the downloads.
                 IconButton {
+                    id: spotifyButton
+
+                    readonly property real progress: SpotifyController.progress
+
                     Layout.alignment: Qt.AlignHCenter
                     Layout.fillWidth: playlistsCard.compact
                     iconName: "download"
+                    // A transparent tint draws the SVG untinted, so drop the icon instead.
+                    icon.source: SpotifyController.downloading ? "" : Qt.resolvedUrl("../icons/download.svg")
                     tip: qsTr("Import from Spotify")
                     onClicked: spotifyDialog.openFresh()
+
+                    Item {
+                        anchors.centerIn: parent
+                        width: 34
+                        height: 34
+                        visible: SpotifyController.downloading
+
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+
+                            ShapePath {
+                                strokeColor: Theme.hover
+                                strokeWidth: 3
+                                fillColor: "transparent"
+                                PathAngleArc { centerX: 17; centerY: 17; radiusX: 15; radiusY: 15; sweepAngle: 360 }
+                            }
+                            ShapePath {
+                                strokeColor: Theme.accent
+                                strokeWidth: 3
+                                fillColor: "transparent"
+                                capStyle: ShapePath.RoundCap
+                                PathAngleArc {
+                                    centerX: 17; centerY: 17; radiusX: 15; radiusY: 15
+                                    startAngle: -90
+                                    sweepAngle: 360 * spotifyButton.progress
+                                }
+                            }
+                        }
+                        Label {
+                            anchors.centerIn: parent
+                            text: Math.round(spotifyButton.progress * 100) + "%"
+                            font.pixelSize: 10
+                        }
+                    }
                 }
             }
         }
@@ -475,21 +524,39 @@ Item {
         id: spotifyDialog
 
         function openFresh() {
-            SpotifyController.clearResult()
-            linkField.text = ""
+            // While downloading, reopening shows their progress instead of a fresh form.
+            if (!SpotifyController.downloading) {
+                SpotifyController.clearResult()
+                linkField.text = ""
+                selected = []
+            }
             open()
-            linkField.forceActiveFocus()
         }
+        // Focused once shown (not before), so the field's label sits up on its line from the start.
+        onOpened: linkField.forceActiveFocus()
 
+        // Missing songs ticked for download (indices into lastImport.missing); none ticked downloads all.
+        property var selected: []
+        readonly property int missingCount: (SpotifyController.lastImport.missing || []).length
+        // Before downloading: pick songs and formats. Once started: each song's progress.
+        readonly property bool picking: missingCount > 0 && downloadList.count === 0
+        readonly property bool songsShown: !SpotifyController.busy && (picking || downloadList.count > 0)
+
+        // Two cards side by side (songs left; link, formats and download right). Only the right one until
+        // a link has missing songs, and only a spinner while a link loads.
         anchors.centerIn: Overlay.overlay
-        width: Math.min(520, page.width - 40)
+        // Downloading: only the progress list, centered.
+        width: downloadList.count > 0 ? Math.min(560, page.width - 40) : songsShown ? Math.min(820, page.width - 40) : 360
         height: Math.min(implicitHeight, page.height - 40)
+        padding: 0
         modal: true
+        // Enter imports, Escape or a click outside closes. Downloads keep going in the background (the
+        // import button shows their progress).
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         Overlay.modal: Rectangle {
             color: Qt.rgba(0, 0, 0, 0.6)
         }
-        title: qsTr("Import from Spotify")
-        standardButtons: Dialog.Close
+        background: Item {}
 
         Connections {
             target: SpotifyController
@@ -500,236 +567,305 @@ Item {
             }
         }
 
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 10
+        contentItem: Item {
+            implicitHeight: SpotifyController.busy ? 40
+                            : Math.max(songsCard.visible ? songsCard.implicitHeight : 0,
+                                       sideCard.visible ? sideCard.implicitHeight : 0)
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                TextField {
-                    id: linkField
-
-                    Layout.fillWidth: true
-                    selectByMouse: true
-                    placeholderText: qsTr("Playlist or album link")
-                    onAccepted: SpotifyController.importLink(text)
-                }
-
-                BusyIndicator {
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    visible: SpotifyController.busy
-                    running: visible
-                }
-
-                Button {
-                    text: qsTr("Import")
-                    enabled: linkField.text.trim() !== "" && !SpotifyController.busy
-                    onClicked: SpotifyController.importLink(linkField.text)
-                }
+            BusyIndicator {
+                anchors.centerIn: parent
+                width: 40
+                height: 40
+                visible: SpotifyController.busy
+                running: visible
             }
 
-            Label {
-                Layout.fillWidth: true
-                visible: SpotifyController.errorText !== ""
-                wrapMode: Text.Wrap
-                text: SpotifyController.errorText
-                color: Material.color(Material.Red, Material.Shade300)
-            }
+            // Left: the missing songs to tick, or each song's download progress.
+            PopupBackground {
+                id: songsCard
 
-            Label {
-                Layout.fillWidth: true
-                visible: text !== ""
-                wrapMode: Text.Wrap
-                text: {
-                    const r = SpotifyController.lastImport
-                    if (r.name === undefined)
-                        return ""
-                    if (r.matched === 0)
-                        return qsTr("None of the %1 songs of \"%2\" are in your library.").arg(r.total).arg(r.name)
-                    return qsTr("%1 of %2 songs found: playlist \"%3\" saved.").arg(r.matched).arg(r.total).arg(r.name)
-                }
-            }
+                anchors.left: parent.left
+                anchors.right: sideCard.visible ? sideCard.left : parent.right
+                anchors.rightMargin: sideCard.visible ? 16 : 0
+                anchors.top: parent.top
+                height: parent.height
+                implicitHeight: songsColumn.implicitHeight + 24
+                visible: spotifyDialog.songsShown
 
-            // Missing songs: fetch them from Soulseek, or look one up by hand.
-            ColumnLayout {
-                Layout.fillWidth: true
-                visible: (SpotifyController.lastImport.missing || []).length > 0 && downloadList.count === 0
-                spacing: 8
+                ColumnLayout {
+                    id: songsColumn
 
-                Label {
-                    text: qsTr("Not in your library: %1").arg((SpotifyController.lastImport.missing || []).length)
-                    font.weight: Font.DemiBold
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
+                    anchors.fill: parent
+                    anchors.margins: 12
                     spacing: 8
 
-                    Label { text: qsTr("Look for"); opacity: 0.7 }
-
-                    CompactComboBox {
-                        id: searchFormatBox
-
-                        Layout.preferredWidth: 110
-                        textRole: "name"
-                        valueRole: "value"
-                        model: [
-                            { name: qsTr("Any"), value: "" },
-                            { name: "FLAC", value: "flac" },
-                            { name: "MP3", value: "mp3" },
-                        ]
-                        currentIndex: 1
-                    }
-
-                    Label { text: qsTr("Save as"); opacity: 0.7 }
-
-                    CompactComboBox {
-                        id: saveFormatBox
-
-                        Layout.preferredWidth: 140
-                        textRole: "name"
-                        valueRole: "value"
-                        model: [
-                            { name: qsTr("Keep original"), value: "original" },
-                            { name: "M4A (AAC)", value: "m4a" },
-                            { name: "MP3", value: "mp3" },
-                            { name: "FLAC", value: "flac" },
-                        ]
-                        currentIndex: Math.max(0, model.findIndex(f => f.value === SlskdController.downloadFormat))
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    Button {
-                        text: qsTr("Download all")
-                        onClicked: SpotifyController.downloadMissing(searchFormatBox.currentValue, saveFormatBox.currentValue)
-                    }
-                }
-            }
-
-            ListView {
-                id: missingList
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: Math.min(contentHeight, 260)
-                visible: count > 0 && downloadList.count === 0
-                clip: true
-                model: SpotifyController.lastImport.missing || []
-                ScrollBar.vertical: SlimScrollBar {}
-
-                delegate: RowLayout {
-                    required property var modelData
-
-                    width: ListView.view.width - 10
-                    spacing: 8
-
-                    Label {
+                    RowLayout {
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: modelData.artist + " – " + modelData.title
-                        opacity: 0.8
-                    }
-
-                    Button {
-                        flat: true
-                        enabled: page.appWindow && page.appWindow.slskdDetected
-                        text: qsTr("Search on Soulseek")
-                        onClicked: {
-                            SlskdController.search(modelData.artist.split(", ")[0] + " " + modelData.title)
-                            spotifyDialog.close()
-                            page.appWindow.page = 3
-                        }
-                    }
-                }
-            }
-
-            // Fetching from Soulseek: one row per song, with what is happening to it.
-            RowLayout {
-                Layout.fillWidth: true
-                visible: downloadList.count > 0
-                spacing: 8
-
-                Label {
-                    Layout.fillWidth: true
-                    font.weight: Font.DemiBold
-                    text: SpotifyController.downloading
-                          ? qsTr("Downloading: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
-                          : qsTr("Done: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
-                }
-
-                Button {
-                    visible: SpotifyController.downloading
-                    flat: true
-                    text: qsTr("Stop")
-                    onClicked: SpotifyController.stopDownloads()
-                }
-            }
-
-            ListView {
-                id: downloadList
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: Math.min(contentHeight, 320)
-                visible: count > 0
-                clip: true
-                spacing: 2
-                model: SpotifyController.downloads
-                ScrollBar.vertical: SlimScrollBar {}
-
-                delegate: RowLayout {
-                    id: downloadRow
-
-                    required property int index
-                    required property string title
-                    required property string artist
-                    required property int stage
-                    required property string detail
-                    required property bool retryable
-
-                    width: ListView.view.width - 10
-                    spacing: 8
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
+                        visible: downloadList.count > 0
+                        spacing: 8
 
                         Label {
                             Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            text: downloadRow.artist + " – " + downloadRow.title
+                            font.weight: Font.DemiBold
+                            text: SpotifyController.downloading
+                                  ? qsTr("Downloading: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
+                                  : qsTr("Done: %1 of %2 added").arg(SpotifyController.downloadedCount).arg(downloadList.count)
                         }
 
-                        Label {
-                            Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                            visible: text !== ""
-                            text: downloadRow.detail
-                            opacity: 0.55
-                            font.pixelSize: 11
+                        Button {
+                            visible: SpotifyController.downloading
+                            flat: true
+                            topInset: 0
+                            bottomInset: 0
+                            topPadding: 0
+                            bottomPadding: 0
+                            implicitHeight: 28
+                            text: qsTr("Cancel")
+                            onClicked: SpotifyController.stopDownloads()
+                        }
+                    }
+
+                    ListView {
+                        id: missingList
+
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: Math.min(contentHeight, 360)
+                        visible: spotifyDialog.picking
+                        clip: true
+                        model: SpotifyController.lastImport.missing || []
+                        ScrollBar.vertical: SlimScrollBar {}
+
+                        delegate: CheckBox {
+                            required property int index
+                            required property var modelData
+
+                            width: ListView.view.width - 10
+                            hoverEnabled: false
+                            text: modelData.artist + " – " + modelData.title
+                            checked: spotifyDialog.selected.includes(index)
+                            onToggled: spotifyDialog.selected = checked ? spotifyDialog.selected.concat([index])
+                                                                        : spotifyDialog.selected.filter(i => i !== index)
+                            contentItem: Label {
+                                leftPadding: parent.indicator.width + parent.spacing
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                text: parent.text
+                                opacity: 0.8
+                            }
+                        }
+                    }
+
+                    EdgeFade {
+                        flickable: missingList
+                        bottomHeight: 40
+                    }
+
+                    ListView {
+                        id: downloadList
+
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredHeight: Math.min(contentHeight, 360)
+                        visible: count > 0
+                        clip: true
+                        spacing: 2
+                        model: SpotifyController.downloads
+                        ScrollBar.vertical: SlimScrollBar {}
+
+                        delegate: RowLayout {
+                            id: downloadRow
+
+                            required property int index
+                            required property string title
+                            required property string artist
+                            required property int stage
+                            required property string detail
+                            required property bool retryable
+
+                            width: ListView.view.width - 10
+                            spacing: 8
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    text: downloadRow.artist + " – " + downloadRow.title
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideMiddle
+                                    visible: text !== ""
+                                    text: downloadRow.detail
+                                    opacity: 0.55
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            Label {
+                                text: [qsTr("Waiting"), qsTr("Searching"), qsTr("Queued"), qsTr("Downloading"), qsTr("Adding"),
+                                       qsTr("Done"), qsTr("Not found"), qsTr("Failed")][downloadRow.stage]
+                                color: downloadRow.stage === PlaylistDownloadsModel.Done ? Theme.accent
+                                     : downloadRow.stage >= PlaylistDownloadsModel.NotFound ? Material.color(Material.Red, Material.Shade300)
+                                     : Material.foreground
+                                opacity: downloadRow.stage === PlaylistDownloadsModel.Waiting ? 0.5 : 0.9
+                                font.pixelSize: 12
+                            }
+
+                            Button {
+                                visible: downloadRow.retryable
+                                flat: true
+                                // Row-high, not Material's 48 px touch target, so rows sit tight.
+                                topInset: 0
+                                bottomInset: 0
+                                topPadding: 0
+                                bottomPadding: 0
+                                implicitHeight: 28
+                                // A finished song may be the wrong file: get the next result instead.
+                                text: downloadRow.stage === PlaylistDownloadsModel.Done ? qsTr("Wrong song") : qsTr("Retry")
+                                onClicked: SpotifyController.retry(downloadRow.index)
+                            }
                         }
                     }
 
                     Label {
-                        text: [qsTr("Waiting"), qsTr("Searching"), qsTr("Queued"), qsTr("Downloading"), qsTr("Adding"),
-                               qsTr("Done"), qsTr("Not found"), qsTr("Failed")][downloadRow.stage]
-                        color: downloadRow.stage === PlaylistDownloadsModel.Done ? Theme.accent
-                             : downloadRow.stage >= PlaylistDownloadsModel.NotFound ? Material.color(Material.Red, Material.Shade300)
-                             : Material.foreground
-                        opacity: downloadRow.stage === PlaylistDownloadsModel.Waiting ? 0.5 : 0.9
-                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                        visible: SpotifyController.downloading
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: qsTr("You can close this window: downloads keep going in the background.")
+                        font.pixelSize: 11
+                        opacity: 0.45
+                    }
+                }
+            }
+
+            // Right: link, formats, what was found, download.
+            PopupBackground {
+                id: sideCard
+
+                anchors.right: parent.right
+                // Centered on the songs card's height, like the mockup.
+                anchors.verticalCenter: parent.verticalCenter
+                width: 360
+                implicitHeight: sideColumn.implicitHeight + 24
+                height: implicitHeight
+                visible: !SpotifyController.busy && downloadList.count === 0
+
+                ColumnLayout {
+                    id: sideColumn
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 12
+                    spacing: 10
+
+                    TextField {
+                        id: linkField
+
+                        Layout.fillWidth: true
+                        visible: !SpotifyController.downloading
+                        selectByMouse: true
+                        horizontalAlignment: Text.AlignHCenter
+                        onAccepted: {
+                            spotifyDialog.selected = []
+                            SpotifyController.importLink(text)
+                        }
+
+                        // Own hint instead of placeholderText: Material's floats up to the top on focus.
+                        Label {
+                            anchors.centerIn: parent
+                            visible: linkField.text === ""
+                            text: qsTr("Playlist or album link")
+                            opacity: 0.5
+                        }
+                    }
+
+                    // Formats, each with its label above.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: spotifyDialog.picking
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Label { Layout.alignment: Qt.AlignHCenter; text: qsTr("Look for"); opacity: 0.7 }
+
+                            CompactComboBox {
+                                id: searchFormatBox
+
+                                Layout.fillWidth: true
+                                textRole: "name"
+                                valueRole: "value"
+                                model: [
+                                    { name: qsTr("Any"), value: "" },
+                                    { name: "FLAC", value: "flac" },
+                                    { name: "MP3", value: "mp3" },
+                                ]
+                                currentIndex: 1
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Label { Layout.alignment: Qt.AlignHCenter; text: qsTr("Save as"); opacity: 0.7 }
+
+                            CompactComboBox {
+                                id: saveFormatBox
+
+                                Layout.fillWidth: true
+                                textRole: "name"
+                                valueRole: "value"
+                                model: [
+                                    { name: qsTr("Keep original"), value: "original" },
+                                    { name: "M4A (AAC)", value: "m4a" },
+                                    { name: "MP3", value: "mp3" },
+                                    { name: "FLAC", value: "flac" },
+                                ]
+                                currentIndex: Math.max(0, model.findIndex(f => f.value === SlskdController.downloadFormat))
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        visible: SpotifyController.errorText !== ""
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: Text.AlignHCenter
+                        text: SpotifyController.errorText
+                        color: Material.color(Material.Red, Material.Shade300)
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        visible: text !== ""
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: Text.AlignHCenter
+                        text: {
+                            const r = SpotifyController.lastImport
+                            if (r.name === undefined)
+                                return ""
+                            if (r.matched === 0)
+                                return qsTr("None of the %1 songs of \"%2\" are in your library.").arg(r.total).arg(r.name)
+                            return qsTr("%1 of %2 songs are in your library: playlist \"%3\" saved.").arg(r.matched).arg(r.total).arg(r.name)
+                        }
                     }
 
                     Button {
-                        visible: downloadRow.retryable
-                        flat: true
-                        // A finished song may be the wrong file: get the next result instead.
-                        text: downloadRow.stage === PlaylistDownloadsModel.Done ? qsTr("Wrong song") : qsTr("Retry")
-                        onClicked: SpotifyController.retry(downloadRow.index)
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: spotifyDialog.picking
+                        text: spotifyDialog.selected.length > 0 ? qsTr("Download selected") : qsTr("Download all")
+                        onClicked: SpotifyController.downloadMissing(searchFormatBox.currentValue, saveFormatBox.currentValue,
+                                                                     spotifyDialog.selected)
                     }
                 }
             }

@@ -208,11 +208,12 @@ bool StatsDatabase::recordPlay(const Track &track, const QDateTime &startedAt, q
     return db.commit() || logFailure(db);
 }
 
-StatsTotals StatsDatabase::totals() const
+StatsTotals StatsDatabase::totals(qint64 since) const
 {
     QSqlQuery query(database());
-    if (!query.exec(u"SELECT COALESCE(SUM(counted), 0), COALESCE(SUM(listened_ms), 0) FROM plays"_s)
-        || !query.next()) {
+    query.prepare(u"SELECT COALESCE(SUM(counted), 0), COALESCE(SUM(listened_ms), 0) FROM plays WHERE started_at >= ?"_s);
+    query.addBindValue(since);
+    if (!query.exec() || !query.next()) {
         logFailure(query);
         return {};
     }
@@ -220,15 +221,17 @@ StatsTotals StatsDatabase::totals() const
 }
 
 // All rankings order by time actually listened; play counts are shown alongside.
-QList<TrackStat> StatsDatabase::topTracks(int limit) const
+QList<TrackStat> StatsDatabase::topTracks(int limit, qint64 since) const
 {
     QSqlQuery query(database());
     query.prepare(uR"(SELECT t.path, t.title, t.artist, t.album, t.duration_ms,
                              SUM(p.counted) AS play_count, SUM(p.listened_ms) AS listened
                       FROM plays p JOIN tracks t ON t.id = p.track_id
+                      WHERE p.started_at >= ?
                       GROUP BY t.id
                       ORDER BY listened DESC, play_count DESC
                       LIMIT ?)"_s);
+    query.addBindValue(since);
     query.addBindValue(limit);
     if (!query.exec()) {
         logFailure(query);
@@ -248,15 +251,16 @@ QList<TrackStat> StatsDatabase::topTracks(int limit) const
     return result;
 }
 
-QList<ArtistStat> StatsDatabase::topArtists(int limit) const
+QList<ArtistStat> StatsDatabase::topArtists(int limit, qint64 since) const
 {
     QSqlQuery query(database());
     query.prepare(uR"(SELECT t.artist, SUM(p.counted) AS play_count, SUM(p.listened_ms) AS listened
                       FROM plays p JOIN tracks t ON t.id = p.track_id
-                      WHERE t.artist <> ''
+                      WHERE t.artist <> '' AND p.started_at >= ?
                       GROUP BY t.artist
                       ORDER BY listened DESC, play_count DESC
                       LIMIT ?)"_s);
+    query.addBindValue(since);
     query.addBindValue(limit);
     if (!query.exec()) {
         logFailure(query);
@@ -266,6 +270,53 @@ QList<ArtistStat> StatsDatabase::topArtists(int limit) const
     QList<ArtistStat> result;
     while (query.next())
         result.append({query.value(0).toString(), query.value(1).toLongLong(), query.value(2).toLongLong()});
+    return result;
+}
+
+QList<QPair<QString, qint64>> StatsDatabase::listenedByPath(qint64 since) const
+{
+    QSqlQuery query(database());
+    query.prepare(uR"(SELECT t.path, SUM(p.listened_ms) FROM plays p JOIN tracks t ON t.id = p.track_id
+                      WHERE p.started_at >= ? GROUP BY t.id)"_s);
+    query.addBindValue(since);
+    if (!query.exec()) {
+        logFailure(query);
+        return {};
+    }
+    QList<QPair<QString, qint64>> result;
+    while (query.next())
+        result.append({query.value(0).toString(), query.value(1).toLongLong()});
+    return result;
+}
+
+QList<QPair<qint64, qint64>> StatsDatabase::listenedByDay(qint64 since, int utcOffsetSecs) const
+{
+    // Integer division: started_at is never before 1970, so no negative rounding.
+    QSqlQuery query(database());
+    query.prepare(uR"(SELECT (started_at + ?) / 86400 AS day, SUM(listened_ms) FROM plays
+                      WHERE started_at >= ? GROUP BY day ORDER BY day)"_s);
+    query.addBindValue(utcOffsetSecs);
+    query.addBindValue(since);
+    if (!query.exec()) {
+        logFailure(query);
+        return {};
+    }
+    QList<QPair<qint64, qint64>> result;
+    while (query.next())
+        result.append({query.value(0).toLongLong(), query.value(1).toLongLong()});
+    return result;
+}
+
+QSet<QString> StatsDatabase::playedAlbums() const
+{
+    QSqlQuery query(database());
+    if (!query.exec(u"SELECT DISTINCT album, artist FROM tracks WHERE album <> ''"_s)) {
+        logFailure(query);
+        return {};
+    }
+    QSet<QString> result;
+    while (query.next())
+        result.insert(query.value(0).toString() + u'\n' + query.value(1).toString());
     return result;
 }
 
@@ -285,16 +336,17 @@ ArtistStat StatsDatabase::artistStat(const QString &artist) const
     return {artist, query.value(0).toLongLong(), query.value(1).toLongLong()};
 }
 
-QList<AlbumStat> StatsDatabase::topAlbums(int limit) const
+QList<AlbumStat> StatsDatabase::topAlbums(int limit, bool byRecent, qint64 since) const
 {
     // An album is its name plus artist: two artists' "Greatest Hits" are two albums.
     QSqlQuery query(database());
     query.prepare(uR"(SELECT t.album, t.artist, MIN(t.path), SUM(p.counted) AS play_count, SUM(p.listened_ms) AS listened
                       FROM plays p JOIN tracks t ON t.id = p.track_id
-                      WHERE t.album <> ''
+                      WHERE t.album <> '' AND p.started_at >= ?
                       GROUP BY t.album, t.artist
-                      ORDER BY listened DESC, play_count DESC
-                      LIMIT ?)"_s);
+                      ORDER BY %1
+                      LIMIT ?)"_s.arg(byRecent ? u"MAX(p.started_at) DESC"_s : u"listened DESC, play_count DESC"_s));
+    query.addBindValue(since);
     query.addBindValue(limit);
     if (!query.exec()) {
         logFailure(query);

@@ -1,5 +1,7 @@
 #include "core/AudioConverter.h"
 
+#include "core/FfmpegInstaller.h"
+
 #include <fileref.h>
 #include <tpropertymap.h>
 
@@ -87,6 +89,9 @@ AudioConverter::~AudioConverter()
 
 QString AudioConverter::ffmpegPath()
 {
+    // grim.'s own copy (FfmpegInstaller) first, then PATH.
+    if (const QString own = FfmpegInstaller::installedPath(); !own.isEmpty())
+        return own;
     return QStandardPaths::findExecutable(u"ffmpeg"_s);
 }
 
@@ -137,7 +142,7 @@ void AudioConverter::startNext()
 
     const QString ffmpeg = ffmpegPath();
     if (ffmpeg.isEmpty()) {
-        finishCurrent(false, tr("ffmpeg not found on PATH"));
+        finishCurrent(false, tr("ffmpeg not found"));
         return;
     }
 

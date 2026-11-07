@@ -38,6 +38,8 @@ Item {
     property string openAlbumCover
     property int openAlbumYear: 0
     property var openAlbumTracks: []
+    // The artist's other albums, under the tracks.
+    property var openAlbumMoreBy: []
     // Average stars of the album's rated tracks, as the grid shows in rating sort (0 = none rated).
     // Reads metaRevision so it updates when a track on the page is rated.
     readonly property real openAlbumRating: {
@@ -70,7 +72,13 @@ Item {
         id: scrollToFlashTimer
 
         interval: 50
-        onTriggered: if (page.flashTrack >= 0) albumTracks.positionViewAtIndex(page.flashTrack, ListView.Center)
+        onTriggered: {
+            const row = page.flashTrack >= 0 ? albumTracks.itemAtIndex(page.flashTrack) : null
+            if (row) {
+                const y = row.mapToItem(albumColumn, 0, 0).y - albumFlick.height / 2
+                albumFlick.contentY = Math.max(0, Math.min(albumFlick.contentHeight - albumFlick.height, y))
+            }
+        }
     }
 
     function sameFile(a, b) {
@@ -106,6 +114,8 @@ Item {
         openAlbumYear = info.year
         openAlbumTracks = LibraryController.albums.tracksOf(row)
         openAlbumFirstUrl = openAlbumTracks.length > 0 ? openAlbumTracks[0].url : ""
+        openAlbumMoreBy = LibraryController.albums.albumsBy(info.artist, info.title)
+        LibraryController.markSeen(LibraryController.albums.urlsOf(row))
     }
 
     // Albums sorted by genre start as a list of genres; picking one shows its albums.
@@ -130,9 +140,11 @@ Item {
     // cleared if it hides that album.
     function openAlbumOf(fileUrl, highlightTrack) {
         let row = LibraryController.albums.rowForTrack(fileUrl)
-        if (row < 0 && (LibraryController.filter !== "" || LibraryController.artistFilter !== "")) {
+        if (row < 0 && (LibraryController.filter !== "" || LibraryController.artistFilter !== ""
+                        || LibraryController.genreFilter !== "")) {
             LibraryController.filter = ""
             LibraryController.artistFilter = ""
+            LibraryController.genreFilter = ""
             row = LibraryController.albums.rowForTrack(fileUrl)
         }
         if (row < 0)
@@ -156,8 +168,22 @@ Item {
     function showArtist(name) {
         openAlbum = -1
         viewSettings.albums = true
+        // Genre view: the artist's genres, not one genre's albums of theirs.
+        LibraryController.genreFilter = ""
         LibraryController.filter = ""
         LibraryController.artistFilter = name
+    }
+
+    // Albums of one genre (a lower-case genre key, as AlbumsModel.genres gives).
+    // Genre opened from Statistics: clearing that genre goes back there.
+    property string statsGenre: ""
+
+    function showGenre(key) {
+        openAlbum = -1
+        viewSettings.albums = true
+        LibraryController.filter = ""
+        LibraryController.artistFilter = ""
+        LibraryController.genreFilter = key
     }
 
     // Artist page: the albums grid of one artist under a photo header with listening stats.
@@ -428,6 +454,7 @@ Item {
         property string secondary
         // The artist at the start of `secondary`: clicking it opens the artist's page.
         property string artistName
+        property bool isNew: false // shows a "New" badge on the cover
 
         signal contextMenu()
 
@@ -439,7 +466,9 @@ Item {
         }
         background: Rectangle {
             radius: Theme.radius
-            color: tile.hovered ? Theme.hover : "transparent"
+            color: Theme.hover
+            opacity: tile.hovered ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
         }
         contentItem: ColumnLayout {
             spacing: 0
@@ -449,6 +478,27 @@ Item {
                 Layout.preferredHeight: width
                 Layout.bottomMargin: 8
                 source: tile.cover
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 6
+                    visible: tile.isNew
+                    width: newLabel.implicitWidth + 12
+                    height: newLabel.implicitHeight + 4
+                    radius: height / 2
+                    color: Theme.accent
+
+                    Label {
+                        id: newLabel
+
+                        anchors.centerIn: parent
+                        text: qsTr("New")
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        color: Theme.window
+                    }
+                }
             }
 
             Label {
@@ -587,7 +637,13 @@ Item {
                     text: page.genreName(LibraryController.albums.genres.find(g => g.key === LibraryController.genreFilter)?.name ?? "")
                           + "   ✕"
                     Material.foreground: Theme.accent
-                    onClicked: LibraryController.genreFilter = ""
+                    onClicked: {
+                        const back = LibraryController.genreFilter === page.statsGenre
+                        LibraryController.genreFilter = ""
+                        page.statsGenre = ""
+                        if (back)
+                            ApplicationWindow.window.page = 2
+                    }
                 }
 
                 Item { Layout.fillWidth: true; Layout.maximumWidth: 1e6; visible: !parent.narrow }
@@ -858,30 +914,83 @@ Item {
                     primary: title
                     secondary: page.albumSubtitle(artist, year, genre, rating)
                     artistName: artist
+                    isNew: LibraryController.unseenCount > 0 && LibraryController.anyUnseen(LibraryController.albums.urlsOf(index))
                     onClicked: page.showAlbum(index)
                     onContextMenu: ApplicationWindow.window.openTrackMenu(LibraryController.albums.urlsOf(index), true)
                 }
             }
 
-            // Genres, list (albums sorted by genre): clicking one shows its albums.
-            ListView {
+            // Genres, grid of folders (albums sorted by genre): each tile shows up to 4 of the genre's covers;
+            // clicking one shows its albums.
+            GridView {
                 id: genreList
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 visible: page.genreList
                 clip: true
+                cellWidth: albumGrid.cellWidth
+                cellHeight: albumGrid.cellHeight
                 model: page.genreList ? LibraryController.albums.genres : null
                 ScrollBar.vertical: SlimScrollBar {}
                 FastWheelScroll { flickable: genreList }
 
-                delegate: LibraryRow {
+                delegate: ItemDelegate {
+                    id: genreTile
+
                     required property var modelData
 
-                    width: ListView.view.width - 12
-                    primary: page.genreName(modelData.name)
-                    trailing: modelData.count === 1 ? qsTr("1 album") : qsTr("%1 albums").arg(modelData.count)
+                    width: GridView.view.cellWidth
+                    height: implicitHeight
+                    leftInset: albumGrid.sideGap
+                    rightInset: albumGrid.sideGap
+                    padding: 8
+                    leftPadding: 8 + albumGrid.sideGap
+                    rightPadding: 8 + albumGrid.sideGap
                     onClicked: LibraryController.genreFilter = modelData.key
+                    background: Rectangle {
+                        radius: Theme.radius
+                        color: Theme.hover
+                        opacity: genreTile.hovered ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+                    contentItem: ColumnLayout {
+                        spacing: 0
+
+                        // One cover fills the tile; more make a 2×2 mosaic like a folder.
+                        Grid {
+                            id: mosaic
+
+                            readonly property int cells: genreTile.modelData.covers.length > 1 ? 2 : 1
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: width
+                            Layout.bottomMargin: 8
+                            columns: cells
+                            spacing: 2
+
+                            Repeater {
+                                model: mosaic.cells * mosaic.cells
+                                CoverArt {
+                                    required property int index
+                                    width: (mosaic.width - mosaic.spacing * (mosaic.cells - 1)) / mosaic.cells
+                                    height: width
+                                    source: genreTile.modelData.covers[index] ?? ""
+                                }
+                            }
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: page.genreName(genreTile.modelData.name)
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: genreTile.modelData.count === 1 ? qsTr("1 album")
+                                                                 : qsTr("%1 albums").arg(genreTile.modelData.count)
+                            opacity: 0.6
+                            font.pixelSize: 12
+                        }
+                    }
                 }
             }
 
@@ -940,11 +1049,28 @@ Item {
             }
         }
 
-        // Album page: a card with cover, title and play button, and a card with the tracks.
-        ColumnLayout {
+        // Album page: a card with cover, title and play button, a card with every track, then More by;
+        // the whole page scrolls as one.
+        Flickable {
+            id: albumFlick
+
             anchors.fill: parent
-            spacing: 12
             visible: page.openAlbum >= 0
+            contentHeight: albumColumn.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: SlimScrollBar {}
+            FastWheelScroll { flickable: albumFlick }
+            Connections {
+                target: page
+                function onOpenAlbumChanged() { albumFlick.contentY = 0 }
+            }
+
+        ColumnLayout {
+            id: albumColumn
+
+            width: albumFlick.width
+            spacing: 12
 
             Card {
                 Layout.fillWidth: true
@@ -1041,18 +1167,16 @@ Item {
 
             Card {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                implicitHeight: albumTracks.contentHeight + 32
 
                 ListView {
                     id: albumTracks
 
                     anchors.fill: parent
                     anchors.margins: 16
-                    clip: true
+                    interactive: false // every row shown; albumFlick scrolls
                     spacing: 2
                     model: page.openAlbumTracks
-                    ScrollBar.vertical: SlimScrollBar {}
-                    FastWheelScroll { flickable: albumTracks }
 
                     delegate: LibraryRow {
                         required property int index
@@ -1070,11 +1194,68 @@ Item {
                     }
                 }
             }
+
+            // More by this artist: a row of their other albums; clicking one opens it.
+            Card {
+                Layout.fillWidth: true
+                implicitHeight: moreByColumn.implicitHeight + 32
+                visible: page.openAlbumMoreBy.length > 0
+
+                ColumnLayout {
+                    id: moreByColumn
+
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 8
+
+                    Label {
+                        text: qsTr("More by %1").arg(page.openAlbumArtist)
+                        font.pixelSize: 15
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    ListView {
+                        id: moreByList
+
+                        Layout.fillWidth: true
+                        // Cover, two text lines, tile padding and room for the scroll bar.
+                        Layout.preferredHeight: 150 + 90
+                        orientation: ListView.Horizontal
+                        spacing: 4
+                        clip: true
+                        model: page.openAlbumMoreBy
+                        ScrollBar.horizontal: SlimScrollBar {}
+
+                        // A mouse wheel scrolls the row sideways while it overflows.
+                        WheelHandler {
+                            enabled: moreByList.contentWidth > moreByList.width
+                            onWheel: (event) => {
+                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                moreByList.contentX = Math.max(0, Math.min(moreByList.contentWidth - moreByList.width,
+                                                                           moreByList.contentX - delta))
+                            }
+                        }
+
+                        delegate: LibraryTile {
+                            required property var modelData
+
+                            width: 150 + 16
+                            cover: modelData.coverUrl
+                            primary: modelData.title
+                            secondary: modelData.year > 0 ? String(modelData.year) : ""
+                            onClicked: page.openAlbumOf(modelData.url, false)
+                            onContextMenu: {}
+                        }
+                    }
+                }
+            }
+        }
         }
 
         // Lists and the grid fade out at the bottom instead of a hard cut, and slightly at the top once scrolled.
         EdgeFade {
-            flickable: page.openAlbum >= 0 ? albumTracks : page.genreList ? genreList : viewSettings.albums ? albumGrid : trackList
+            flickable: page.openAlbum >= 0 ? albumFlick : page.genreList ? genreList : viewSettings.albums ? albumGrid : trackList
             bottomHeight: 140
         }
     }

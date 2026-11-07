@@ -5,9 +5,11 @@
 #include "providers/LibraryModel.h"
 
 #include <QFutureWatcher>
+#include <QSet>
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
+class CoverFetcher;
 class LibraryDatabase;
 class QJSEngine;
 class QQmlEngine;
@@ -37,6 +39,8 @@ class LibraryController : public QObject
     // read it too, so they re-evaluate: `metaRevision >= 0 ? rating(url) : 0` (not a comma
     // expression: compiled QML drops the dependency of an unused comma operand).
     Q_PROPERTY(int metaRevision READ metaRevision NOTIFY metaChanged FINAL)
+    // Downloaded songs not looked at yet (the album grid's "new" badge); bindings read it to update.
+    Q_PROPERTY(int unseenCount READ unseenCount NOTIFY unseenChanged FINAL)
 
 public:
     LibraryController(SettingsController &settings, LibraryDatabase &database, QObject *parent = nullptr);
@@ -64,6 +68,14 @@ public:
     Q_INVOKABLE void setRating(const QUrl &fileUrl, int stars);
     Q_INVOKABLE bool isFavorite(const QUrl &fileUrl) const;
     Q_INVOKABLE void toggleFavorite(const QUrl &fileUrl);
+    // Home page row: favorite songs, latest first. [{title, artist, coverUrl, url}]
+    Q_INVOKABLE QVariantList favoriteTracks(int limit) const;
+
+    int unseenCount() const;
+    Q_INVOKABLE bool anyUnseen(const QList<QUrl> &fileUrls) const;
+    Q_INVOKABLE void markSeen(const QList<QUrl> &fileUrls);
+    // A download just added to the library: badged until its album is opened.
+    void addUnseen(const QString &path);
     // A song's own volume adjustment in dB (replaces its ReplayGain tags); NaN = none, the tags apply.
     Q_INVOKABLE double replayGainDb(const QUrl &fileUrl) const;
     // The track gain in the file's ReplayGain tags; NaN without one.
@@ -84,6 +96,9 @@ public:
     // Writes the given fields (absent ones stay; empty clears) to every file. cover: 0 keep,
     // 1 replace with the picture at coverUrl, 2 remove. The files are re-read into the library.
     // Empty on success, else a message for the user.
+    // Looks the album cover of these songs up online and adds it to the ones that have none. Answers with
+    // coverSearchFinished.
+    Q_INVOKABLE void findCover(const QList<QUrl> &fileUrls);
     Q_INVOKABLE QString writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,
                                   const QUrl &coverUrl);
 
@@ -94,11 +109,14 @@ public:
     void addFile(const QString &path);
 
 signals:
+    // findCover() is done: how many songs got the cover (0: none found, or all already had one).
+    void coverSearchFinished(int added);
     void scanningChanged();
     void filterChanged();
     void artistFilterChanged();
     void genreFilterChanged();
     void metaChanged();
+    void unseenChanged();
     // Emitted before files are deleted, so the player can let go of them (Windows refuses to
     // delete open files).
     void aboutToDelete(const QStringList &paths);
@@ -109,8 +127,10 @@ private:
     SettingsController &m_settings;
     LibraryDatabase &m_database;
     LibraryModel *m_tracks;
+    CoverFetcher *m_covers = nullptr; // created in the constructor
     LibraryModel *m_pickerTracks;
     int m_metaRevision = 0;
+    QSet<QString> m_unseen; // unseenKey() of each path, saved in library/unseen
     AlbumsModel *m_albums;
     // Reads the folder; `full` ignores the index and reads every file's tags again.
     void startScan(bool full);

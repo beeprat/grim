@@ -1,4 +1,5 @@
 #include "core/CredentialStore.h"
+#include "core/FfmpegInstaller.h"
 #include "core/SlskdRunner.h"
 
 #include <QCryptographicHash>
@@ -62,6 +63,29 @@ private slots:
         QVERIFY(!SlskdRunner::installFromZip(zip, QByteArray(64, 'a'), destination, &error));
         QVERIFY(!error.isEmpty());
         QVERIFY(!QDir(destination).exists()); // nothing unpacked
+    }
+
+    // ffmpeg: only bin/ffmpeg.exe and the licence are kept from the build's zip.
+    void installsFfmpegFromAVerifiedZip()
+    {
+        QTemporaryDir dir;
+        const QString zip = dir.path() + u"/ffmpeg.zip"_s;
+        {
+            QZipWriter writer(zip);
+            writer.addFile(u"ffmpeg-9.0.2-essentials_build/bin/ffmpeg.exe"_s, QByteArray("MZ ffmpeg"));
+            writer.addFile(u"ffmpeg-9.0.2-essentials_build/bin/ffmpeg"_s, QByteArray("ELF ffmpeg"));
+            writer.addFile(u"ffmpeg-9.0.2-essentials_build/bin/ffplay.exe"_s, QByteArray("MZ ffplay"));
+            writer.addFile(u"ffmpeg-9.0.2-essentials_build/LICENSE"_s, QByteArray("GPL"));
+            writer.close();
+        }
+        const QString destination = dir.path() + u"/9.0.2"_s;
+        QString error;
+        QVERIFY(!FfmpegInstaller::installFromZip(zip, QByteArray(64, 'a'), destination, &error));
+        QVERIFY(!QDir(destination).exists());
+
+        QVERIFY2(FfmpegInstaller::installFromZip(zip, sha256Of(zip), destination, &error), qPrintable(error));
+        QVERIFY(QFile::exists(destination + u"/LICENSE.txt"_s));
+        QCOMPARE(QDir(destination).entryList(QDir::Files).size(), 2); // no ffplay
     }
 
     void storesAndRemovesASecret()

@@ -266,6 +266,29 @@ private slots:
         QVERIFY(db.open(path)); // migration must be a no-op on an existing schema
         QCOMPARE(db.totals().playCount, 1);
     }
+
+    void filtersByDateAndBucketsDays()
+    {
+        StatsDatabase db;
+        QVERIFY(db.open(u":memory:"_s));
+        const qint64 start = kStart.toSecsSinceEpoch(); // 1'700'000'000 is 22:13 UTC
+        QVERIFY(db.recordPlay(makeTrack(u"old.flac"_s, u"A"_s), kStart, 60'000));
+        QVERIFY(db.recordPlay(makeTrack(u"new.flac"_s, u"B"_s), kStart.addSecs(3 * 3600), 40'000)); // next UTC day
+
+        QCOMPARE(db.totals().listenedMs, 100'000);
+        QCOMPARE(db.totals(start + 1).listenedMs, 40'000);
+        QCOMPARE(db.topArtists(10, start + 1).size(), 1);
+        QCOMPARE(db.listenedByPath(start + 1).size(), 1);
+
+        const auto utcDays = db.listenedByDay(0, 0);
+        QCOMPARE(utcDays.size(), 2);
+        QCOMPARE(utcDays[0].first, start / 86400);
+        QCOMPARE(utcDays[1].second, 40'000);
+        // Two hours behind UTC both plays fall on the same local day.
+        QCOMPARE(db.listenedByDay(0, -2 * 3600).size(), 1);
+
+        QCOMPARE(db.playedAlbums(), QSet<QString>({u"Album\nA"_s, u"Album\nB"_s}));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestStatsDatabase)

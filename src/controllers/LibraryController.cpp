@@ -1,6 +1,7 @@
 #include "controllers/LibraryController.h"
 
 #include "controllers/SettingsController.h"
+#include "core/CoverFetcher.h"
 #include "core/LibraryDatabase.h"
 #include "core/LibraryFiles.h"
 #include "core/ReplayGain.h"
@@ -21,6 +22,8 @@
 #include <QImage>
 #include <QImageReader>
 #include <QProcess>
+#include <algorithm>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QJSEngine>
 #include <QTimer>
@@ -35,9 +38,12 @@ LibraryController::LibraryController(SettingsController &settings, LibraryDataba
     , m_pickerTracks(new LibraryModel(this))
     , m_albums(new AlbumsModel(*m_tracks, [&database](const QString &path) { return database.rating(path); }, this))
 {
+    m_covers = new CoverFetcher(this);
     Q_ASSERT(!s_instance);
     s_instance = this;
     m_tracks->setRatingSource([&database](const QString &path) { return database.rating(path); });
+    for (const QString &key : QSettings().value(QStringLiteral("library/unseen")).toStringList())
+        m_unseen.insert(key);
 
     m_filterDelay = new QTimer(this);
     m_filterDelay->setSingleShot(true);
@@ -203,6 +209,63 @@ bool LibraryController::isFavorite(const QUrl &fileUrl) const
     return m_database.isFavorite(fileUrl.toLocalFile());
 }
 
+namespace {
+
+// Paths reach us with either separator and, on Windows, any case.
+QString unseenKey(const QString &path)
+{
+    return QDir::fromNativeSeparators(path).toLower();
+}
+
+} // namespace
+
+int LibraryController::unseenCount() const
+{
+    return int(m_unseen.size());
+}
+
+bool LibraryController::anyUnseen(const QList<QUrl> &fileUrls) const
+{
+    return std::any_of(fileUrls.begin(), fileUrls.end(),
+                       [this](const QUrl &url) { return m_unseen.contains(unseenKey(url.toLocalFile())); });
+}
+
+void LibraryController::markSeen(const QList<QUrl> &fileUrls)
+{
+    bool changed = false;
+    for (const QUrl &url : fileUrls)
+        changed |= m_unseen.remove(unseenKey(url.toLocalFile()));
+    if (!changed)
+        return;
+    // shortcut: a file deleted or renamed before it is seen stays listed, harmless; prune if it grows.
+    QSettings().setValue(QStringLiteral("library/unseen"), QStringList(m_unseen.begin(), m_unseen.end()));
+    emit unseenChanged();
+}
+
+void LibraryController::addUnseen(const QString &path)
+{
+    m_unseen.insert(unseenKey(path));
+    QSettings().setValue(QStringLiteral("library/unseen"), QStringList(m_unseen.begin(), m_unseen.end()));
+    emit unseenChanged();
+}
+
+QVariantList LibraryController::favoriteTracks(int limit) const
+{
+    QVariantList result;
+    for (const QString &path : m_database.favorites()) {
+        if (result.size() >= limit)
+            break;
+        const Track *track = m_tracks->findTrack(path);
+        if (!track)
+            continue;
+        result.append(QVariantMap{{QStringLiteral("title"), track->title.isEmpty() ? QFileInfo(path).completeBaseName() : track->title},
+                                  {QStringLiteral("artist"), track->artist},
+                                  {QStringLiteral("coverUrl"), CoverImageProvider::urlFor(path)},
+                                  {QStringLiteral("url"), QUrl::fromLocalFile(path)}});
+    }
+    return result;
+}
+
 void LibraryController::toggleFavorite(const QUrl &fileUrl)
 {
     const QString path = fileUrl.toLocalFile();
@@ -323,6 +386,34 @@ QVariantMap LibraryController::tagsOf(const QList<QUrl> &fileUrls) const
     common.insert(QStringLiteral("coverUrl"),
                   fileUrls.isEmpty() ? QString() : CoverImageProvider::urlFor(fileUrls.first().toLocalFile()));
     return common;
+}
+
+void LibraryController::findCover(const QList<QUrl> &fileUrls)
+{
+    QStringList missing;
+    for (const QUrl &url : fileUrls)
+        if (TagReader::readCover(url.toLocalFile()).isEmpty())
+            missing.append(url.toLocalFile());
+    if (missing.isEmpty()) {
+        emit coverSearchFinished(0);
+        return;
+    }
+    // The album's name and artist from its first song without a cover.
+    const Track first = TagReader::read(missing.first());
+    m_covers->fetch(first.artist, first.album, [this, missing](const QByteArray &cover) {
+        QStringList written;
+        for (const QString &path : missing)
+            if (!cover.isEmpty() && TagEditor::write(path, {}, TagEditor::Cover::Replace, cover).isEmpty())
+                written.append(path);
+        if (!written.isEmpty()) {
+            CoverImageProvider::bumpRevision();
+            m_tracks->removeTracks(written);
+            m_pickerTracks->removeTracks(written);
+            for (const QString &path : std::as_const(written))
+                addFile(path);
+        }
+        emit coverSearchFinished(int(written.size()));
+    });
 }
 
 QString LibraryController::writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,

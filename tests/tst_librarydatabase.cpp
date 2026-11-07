@@ -1,4 +1,5 @@
 #include "core/LibraryDatabase.h"
+#include "core/LibrarySidecar.h"
 
 #include <QTemporaryDir>
 #include <QTest>
@@ -95,6 +96,43 @@ private slots:
         QVERIFY(!db.replayGainDb(u"y"_s)); // the tags apply
         QVERIFY(!db.replayGainDb(u"z"_s));
         QCOMPARE(db.playlistTracks(db.playlists().first().id), QStringList{u"x"_s});
+    }
+    // Two computers: the first writes the sidecar into the music folder, the second (other folder path,
+    // own ratings) reads it and keeps what it already had.
+    void sidecarCarriesMetaToAnotherFolder()
+    {
+        QTemporaryDir first;
+        QTemporaryDir second;
+        const QString a = first.path() + u"/Artist/a.m4a"_s;
+        const QString b = first.path() + u"/b.m4a"_s;
+        LibraryDatabase source;
+        QVERIFY(source.open(u":memory:"_s));
+        QVERIFY(source.setRating(a, 5));
+        QVERIFY(source.setReplayGainDb(a, -3.5));
+        QVERIFY(source.setFavorite(b, true));
+        QVERIFY(source.setFavorite(a, true));
+        QVERIFY(source.setRating(u"D:/Elsewhere/c.m4a"_s, 2)); // outside the folder: left out
+        QVERIFY(source.createPlaylist(u"Road"_s, {b, a}));
+        QVERIFY(LibrarySidecar::write(source, first.path()));
+        QVERIFY(QFile::copy(first.filePath(QLatin1StringView(LibrarySidecar::kFileName)),
+                            second.filePath(QLatin1StringView(LibrarySidecar::kFileName))));
+
+        const QString a2 = second.path() + u"/Artist/a.m4a"_s;
+        const QString b2 = second.path() + u"/b.m4a"_s;
+        LibraryDatabase target;
+        QVERIFY(target.open(u":memory:"_s));
+        QVERIFY(target.setRating(b2, 1)); // own rating stays
+        QVERIFY(LibrarySidecar::read(target, second.path()));
+        QCOMPARE(target.rating(a2), 5);
+        QCOMPARE(target.rating(b2), 1);
+        QCOMPARE(target.replayGainDb(a2), std::optional<double>(-3.5));
+        QVERIFY(target.isFavorite(a2));
+        QVERIFY(target.isFavorite(b2));
+        QCOMPARE(target.playlists().size(), 1);
+        QCOMPARE(target.playlistTracks(target.playlists().first().id), (QStringList{b2, a2}));
+        QVERIFY(!target.rating(second.path() + u"/c.m4a"_s));
+
+        QVERIFY(!LibrarySidecar::read(target, second.path())); // nothing new the second time
     }
 };
 

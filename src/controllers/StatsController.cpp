@@ -3,6 +3,7 @@
 #include "core/ArtistImageFetcher.h"
 #include "providers/CoverImageProvider.h"
 
+#include <QDate>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +16,8 @@ using namespace Qt::StringLiterals;
 namespace {
 
 constexpr int kTopCount = 10;
+constexpr int kGenreSlices = 7; // the rest go into "Other"
+constexpr int kMaxGraphDays = 365;
 
 QVariantMap highlight(const StatsListModel::Entry &entry, const QString &image)
 {
@@ -78,6 +81,11 @@ qint64 StatsController::totalPlays() const
     return m_totals.playCount;
 }
 
+qint64 StatsController::allTimeListenedMs() const
+{
+    return m_allTimeListenedMs;
+}
+
 qint64 StatsController::totalListenedMs() const
 {
     return m_totals.listenedMs;
@@ -113,6 +121,49 @@ QVariantMap StatsController::topAlbum() const
     return m_topAlbum;
 }
 
+int StatsController::rangeDays() const
+{
+    return m_rangeDays;
+}
+
+void StatsController::setRangeDays(int days)
+{
+    if (days == m_rangeDays || days < 0)
+        return;
+    m_rangeDays = days;
+    emit rangeDaysChanged();
+    refresh();
+}
+
+QVariantList StatsController::genreShares() const
+{
+    return m_genreShares;
+}
+
+QVariantList StatsController::dailyListening() const
+{
+    return m_dailyListening;
+}
+
+void StatsController::setGenreLookup(std::function<QString(const QString &)> lookup)
+{
+    m_genreOf = std::move(lookup);
+}
+
+QVariantList StatsController::neverPlayed(const QVariantList &albums, int limit) const
+{
+    const QSet<QString> played = m_database.isOpen() ? m_database.playedAlbums() : QSet<QString>();
+    QVariantList result;
+    for (const QVariant &entry : albums) {
+        if (result.size() >= limit)
+            break;
+        const QVariantMap album = entry.toMap();
+        if (!played.contains(album.value(u"title"_s).toString() + u'\n' + album.value(u"artist"_s).toString()))
+            result.append(album);
+    }
+    return result;
+}
+
 QString StatsController::exportTo(const QUrl &fileUrl, const QString &libraryFolder)
 {
     const QByteArray json = m_database.exportJson(libraryFolder);
@@ -134,28 +185,86 @@ QString StatsController::importFrom(const QUrl &fileUrl, const QString &libraryF
     return added == 1 ? tr("Imported 1 play") : tr("Imported %1 plays").arg(added);
 }
 
+QVariantList StatsController::homeAlbums(bool recent, int limit) const
+{
+    QVariantList result;
+    // Asks for extra rows: albums deleted since they were played are skipped.
+    for (const AlbumStat &stat : m_database.topAlbums(limit * 3, recent)) {
+        if (result.size() >= limit)
+            break;
+        if (!QFileInfo::exists(stat.samplePath))
+            continue;
+        result.append(QVariantMap{{u"title"_s, stat.album},
+                                  {u"artist"_s, stat.artist},
+                                  {u"coverUrl"_s, CoverImageProvider::urlFor(stat.samplePath)},
+                                  {u"url"_s, QUrl::fromLocalFile(stat.samplePath)}});
+    }
+    return result;
+}
+
 void StatsController::refresh()
 {
     // A failed open is already logged once; don't repeat a warning per query.
     if (!m_database.isOpen())
         return;
 
-    m_totals = m_database.totals();
+    const QDate today = QDate::currentDate();
+    // Range starts at local midnight, so "7 days" is today and the 6 before.
+    const qint64 since = m_rangeDays > 0 ? QDateTime(today.addDays(1 - m_rangeDays), QTime(0, 0)).toSecsSinceEpoch() : 0;
+
+    m_totals = m_database.totals(since);
+    m_allTimeListenedMs = since > 0 ? m_database.totals().listenedMs : m_totals.listenedMs;
     emit totalsChanged();
 
+    // Genre slices.
+    QHash<QString, qint64> byGenre;
+    for (const auto &[path, ms] : m_database.listenedByPath(since)) {
+        const QString genre = m_genreOf ? m_genreOf(path).trimmed() : QString();
+        byGenre[genre] += ms; // empty: no genre tag, named "Unknown" below
+    }
+    QList<QPair<QString, qint64>> genres(byGenre.keyValueBegin(), byGenre.keyValueEnd());
+    std::sort(genres.begin(), genres.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
+    m_genreShares.clear();
+    qint64 other = 0;
+    for (qsizetype i = 0; i < genres.size(); ++i) {
+        if (i < kGenreSlices)
+            m_genreShares.append(QVariantMap{{u"genre"_s, genres[i].first.isEmpty() ? tr("Unknown") : genres[i].first},
+                                             {u"key"_s, genres[i].first.toLower()}, // the library's genre filter key
+                                             {u"ms"_s, genres[i].second}});
+        else
+            other += genres[i].second;
+    }
+    if (other > 0)
+        m_genreShares.append(QVariantMap{{u"genre"_s, tr("Other")}, {u"key"_s, QString()}, {u"ms"_s, other}});
+
+    // Daily bars, zero-filled. All time starts at the first day listened.
+    // shortcut: today's UTC offset is used for every day, so days across a DST change shift by an hour; fine for a chart.
+    const int offset = QDateTime::currentDateTime().offsetFromUtc();
+    const auto days = m_database.listenedByDay(since, offset);
+    const qint64 todayNumber = (QDateTime::currentSecsSinceEpoch() + offset) / 86400;
+    qint64 first = m_rangeDays > 0 ? todayNumber - m_rangeDays + 1 : (days.isEmpty() ? todayNumber : days.first().first);
+    first = std::max(first, todayNumber - kMaxGraphDays + 1);
+    QHash<qint64, qint64> msByDay;
+    for (const auto &[day, ms] : days)
+        msByDay.insert(day, ms);
+    m_dailyListening.clear();
+    for (qint64 day = first; day <= todayNumber; ++day)
+        m_dailyListening.append(QVariantMap{{u"date"_s, today.addDays(day - todayNumber)}, {u"ms"_s, msByDay.value(day)}});
+    emit chartsChanged();
+
     QList<StatsListModel::Entry> tracks;
-    for (const TrackStat &stat : m_database.topTracks(kTopCount)) {
+    for (const TrackStat &stat : m_database.topTracks(kTopCount, since)) {
         const QString title = stat.track.title.isEmpty() ? QFileInfo(stat.track.path).completeBaseName()
                                                          : stat.track.title;
         tracks.append({title, stat.track.artist, stat.playCount, stat.listenedMs, QUrl::fromLocalFile(stat.track.path)});
     }
 
     QList<StatsListModel::Entry> artists;
-    for (const ArtistStat &stat : m_database.topArtists(kTopCount))
+    for (const ArtistStat &stat : m_database.topArtists(kTopCount, since))
         artists.append({stat.artist, QString(), stat.playCount, stat.listenedMs, QUrl()});
 
     QList<StatsListModel::Entry> albums;
-    for (const AlbumStat &stat : m_database.topAlbums(kTopCount))
+    for (const AlbumStat &stat : m_database.topAlbums(kTopCount, false, since))
         albums.append({stat.album, stat.artist, stat.playCount, stat.listenedMs, QUrl::fromLocalFile(stat.samplePath)});
 
     // Highlights: covers come from the cover provider; the artist photo from the cache or Deezer,

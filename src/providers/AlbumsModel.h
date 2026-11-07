@@ -23,7 +23,7 @@ class AlbumsModel : public QAbstractListModel
     // Rows shown (after filters).
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
     // Genres of the albums matching the search and artist filters, A–Z with unknown last:
-    // [{key, name, count}]. `key` goes to setGenreFilter(); `name` is empty for "no genre tag".
+    // [{key, name, count, covers}] (covers: up to 4 album cover URLs). `key` goes to setGenreFilter(); `name` is empty for "no genre tag".
     Q_PROPERTY(QVariantList genres READ genres NOTIFY genresChanged FINAL)
 
 public:
@@ -61,8 +61,15 @@ public:
     Q_INVOKABLE QVariantList tracksOf(int row) const;
     // For PlayerController.playQueue().
     Q_INVOKABLE QList<QUrl> urlsOf(int row) const;
+    // "More by" on the album page: this artist's other albums, whatever the filters, newest first:
+    // [{title, year, coverUrl, url}] (`url`: the album's first track, for openAlbumOf).
+    Q_INVOKABLE QVariantList albumsBy(const QString &artist, const QString &exceptTitle) const;
     // Every track of every album currently shown (after search/artist filters), album by album.
     Q_INVOKABLE QList<QUrl> allUrls() const;
+    // Home page rows, same shape as albumsBy: newest files first (creation time of the first track), and
+    // best rated first (rated albums only).
+    Q_INVOKABLE QVariantList recentlyAdded(int limit) const;
+    Q_INVOKABLE QVariantList topRated(int limit) const;
 
     void setFilter(const QString &text);
     // Only albums of this genre (a `key` from genres()); empty shows all.
@@ -95,6 +102,7 @@ private:
 
     // Regroups every library track into m_all (library or ratings changed), then applyFilter().
     void rebuild();
+    QVariantList toList(const QList<const Album *> &albums) const;
     // Filters and sorts m_all into the shown rows; cheap enough to run per search keystroke.
     void applyFilter();
 

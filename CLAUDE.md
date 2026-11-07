@@ -105,6 +105,10 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - `library.sqlite` (`core/LibraryDatabase`): ratings, favorites, per-song volume adjustment in dB
   (`replaygain_db`, NULL = none; schema v3), playlists, keyed by absolute path with forward slashes. Playlist id 0 is
   the built-in Favorites list. Older builds refuse a newer schema (no ratings shown) rather than downgrade it.
+- `<music folder>/.grim-library.json` (`core/LibrarySidecar`): the same meta and playlists keyed by path relative to
+  the music folder, so a backup carries them to another machine. Read at start and on folder change (fills only what
+  the DB lacks, never overwrites), rewritten 2 s after `metaChanged`/`playlistsChanged` and on quit. Audio files are
+  never written. A song renamed or moved outside grim. loses its entry.
 - `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
 - `cache/covers` (`core/CoverCache`: one JPEG (q80) per cover picture + size, `refs/<sha1 of path+mtime+size>` names the picture; `.none` = no cover; a folder without `refs/` has old per-track thumbnails, deleted on start), `cache/artist-photos` (YouTube Music header banners via its web API, Deezer as fallback; the old square `cache/artists` is deleted on start),
   `cache/lyrics` (LRCLIB; `.none` retried after 7 days). Network failures are never cached. Safe to delete.
@@ -139,7 +143,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Crossfade: only automatic track changes (not manual next/prev, repeat one, or tracks shorter than two fades).
 - Gapless (crossfade off): 5 s before the end, `queueNext` schedules the next track with
   `ma_sound_set_start_time_in_pcm_frames`; pause/seek/load/repeat/crossfade/order changes drop it, re-queued when due.
-- A-B loop (Ctrl+click/drag on `SeekBar`, right-click clears): gapless and crossfade are off inside it; a new track
+- A-B loop (Ctrl+click/drag on `SeekBar`, Shift while dragging = 10x finer, time shown as m:ss.t; right-click clears;
+  while dragging, playback follows: the start plays from it, the end plays its last second, m:ss.mmm rides above;
+  Ctrl+drag on a marker of a complete loop moves it): gapless and crossfade are off inside it; a new track
   clears it; not persisted.
 
 ## Integrations
@@ -166,15 +172,34 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   most of those tracks are in, their most common artist / album name / year, and their most common cover, then moves
   there (`LibraryFiles::moveIntoFolder`); otherwise it goes in by its download folder as before. Library tracks come
   from `setLibraryTracks` (main.cpp).
+- Edition notes never show: `TagReader::read` runs `DownloadTagger::cleanTitle` on every title and album name
+  ("(Remastered 2009)", "[Deluxe Edition]", "(Special Edition)", "(50th Anniversary)"). The files keep their tags.
+- Spotify import (`PlaylistsPage` → `SpotifyController`): the popup shows only the link field (Enter imports, Escape or
+  a click outside closes); the embed page is fetched once more on a network error (the first request after start
+  often fails). Missing songs have checkboxes: "Download all" with none ticked, "Download selected" otherwise
+  (`downloadMissing(…, missingRows)`). Downloads go on with the popup closed: the import button turns into a progress
+  ring (`SpotifyController::progress`: finished songs count whole, a download by its bytes). `Main.qml`'s toast shows each song added (`SlskdController::songAdded`) and the
+  end of a Spotify batch.
+- Library: albums sorted by genre show a grid of genre tiles (2×2 cover mosaic, `AlbumsModel::genres` `covers`);
+  opening an artist (now playing, album page) clears the genre filter, so in genre sort it shows that artist's genres.
+  The album page scrolls as one (all tracks listed, no inner scroll) and ends with "More by <artist>" (`AlbumsModel::albumsBy`, newest first, ignoring filters;
+  the mouse wheel scrolls it sideways).
 - A download whose album is not in the library goes to `<library>/<Artist>/<Album>` (`DownloadTagger::
   libraryFolderFor`, existing folders reused by artist/album key, "3. Album (1971)" folders included).
-- Download conversion (`core/AudioConverter`): ffmpeg from PATH, writes `<name>.converting.<ext>` (skipped by scans),
+- Missing covers (`core/CoverFetcher`, Deezer `/search/album`, exact artistKey + albumKey match only, answers kept for
+  the session): Soulseek imports with no cover in the file, folder or joined album get one before `trackImported`;
+  "Find cover online" in the track menu adds it to songs that have none (`LibraryController::findCover`).
+- Download conversion (`core/DownloadConverter`, owned by `SlskdController`, wraps `core/AudioConverter`): grim.'s own ffmpeg (`core/FfmpegInstaller`, Gyan essentials build
+  pinned by SHA-256, Windows x64, only `ffmpeg.exe` + licence kept in `<AppLocalData>/ffmpeg/<version>`), else PATH.
+  Missing ffmpeg: downloads wait, `SlskdController::ffmpegNeeded` opens one dialog (Main.qml) per batch; "Keep
+  original" imports them unconverted and stops asking for the session. Writes `<name>.converting.<ext>` (skipped by scans),
   copies tags with TagLib, then renames. Original goes to the Recycle Bin.
 - Last.fm (`core/LastFmClient`): signature = md5 of sorted params (no `format`) + secret. Queue sent in batches of
   50, removed only once accepted; errors -1, 4, 10, 11, 13, 16, 26, 29 keep it, 9 disconnects but keeps it, others
   drop the batch. Scrobble after 15 s of actual listening.
 - Discord (`core/DiscordIpc`, no SDK): pipe `discord-ipc-0..9` (Unix socket in `$XDG_RUNTIME_DIR` on Linux), frames
   op + int32 LE length + JSON. Updates debounced 1.5 s. Covers uploaded to imgur, keyed by sha1 of the JPEG.
+  The cover links to the GitHub page (`large_url`).
 - Lyrics: tag / sidecar `.lrc`, then cache, then LRCLIB (`/api/get`, then `/api/search`). `lyricIndex` updates only
   while the lyrics panel is visible (`PlayerController.lyricsShown`).
 - Media keys: `RegisterHotKey` (`controllers/MediaKeys`) on Windows, `controllers/Mpris` on Linux. `MediaKeys` also
@@ -214,10 +239,24 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   `PlaylistsPage` meets its row and the tracks card edge to edge).
 - Menus: `CompactMenu`/`CompactMenuItem`/`CompactComboBox` with `PopupBackground`. One `TrackContextMenu` in `Main`,
   opened via `ApplicationWindow.window.openTrackMenu([urls])`.
-- Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings. Non-Library pages are `LazyPage` loaders.
+- Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings, 5 Home (start page, first rail button).
+  Pages 1–4 are `LazyPage` loaders. Home (`HomePage.qml`): greeting, "grim <version>" (`Qt.application.version`), count chips; album tiles show the "New" badge until opened; right-click opens the shared track menu, then rows (a divider line above each) Recently added (`AlbumsModel::recentlyAdded`, file
+  creation time of each album's first track), Recently played / Most played (`StatsController::homeAlbums`), Favorites
+  (`LibraryController::favoriteTracks`), Top rated (`AlbumsModel::topRated`), Never played (`StatsController::neverPlayed`: albums with no listening at
+  all); a tile opens it in the Library, right-click opens the track menu (song, or the album's tracks).
+- Statistics: range buttons set `StatsController::rangeDays` (7, 30, 90, 0 = all time; local-midnight start) for totals,
+  lists, highlights and charts. Charts are QML Canvas: per-day bars (`dailyListening`, zero-filled, all time capped at
+  365 days; hover names the day) and a genre pie (`genreShares`, top 7 + Other; genre comes from the library through
+  `setGenreLookup` in main.cpp, since the stats DB has none). A genre opened from the pie remembers it (`LibraryPage.statsGenre`);
+  clearing that genre chip returns to Statistics. Leaving the library for any page drops it. Home and Statistics scroll with `EdgeFade` like the library. Milestones card: one medal per set (`medalSets` in Main.qml:
+  listening hours 24/50/100/150/250 via `allTimeListenedMs`, ignores the range; library songs
+  100/250/500/1000/2000), showing the highest tier won;
+  click lists every tier and its goal. Tier colors by rarity: `Theme.medalColors` (bronze .. diamond). New tiers toast once (`milestones/<set>` setting = tiers announced).
+- "New" badge: every Soulseek import (`trackImported`) goes into `LibraryController`'s unseen set (`library/unseen`);
+  the album grid badges albums holding one, and opening the album (`showAlbum`) marks them seen.
 - Panel grid (`Main.qml`): empty `layout/grid` = classic pixel layout; rects are [col, row, w, h, pxHeight, pxWidth]
   (-1 = scales), see `placeAxis()`/`flexAxis()`.
-- Frameless window: `TitleBar.qml` (drag, buttons, slskd dot), `ResizeEdge.qml`; DWM rounded corners on Windows 11.
+- Frameless window: `TitleBar.qml` (drag, buttons, slskd dot; `SlskdController::currentDownload` centered while Soulseek downloads, unless the update pill shows), `ResizeEdge.qml`; DWM rounded corners on Windows 11.
   The title bar is outside the Ctrl+wheel zoom area.
 - Track order inside an album: disc, track number, file name (`albumOrderLess`). `LibraryModel::tracks()` stays in
   artist order (`AlbumsModel` and `findTrack` index into it).

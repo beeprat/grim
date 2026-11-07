@@ -26,6 +26,8 @@ constexpr qint64 kSearchTimeoutMs = 120000;
 // A queued file slskd never lists (the uploader went away) is given up after this; the next result follows.
 constexpr qint64 kEnqueueTimeoutMs = 60000;
 // Downloaded but never imported (conversion stuck) after this: failed.
+// Waiting in an uploader's queue this long without starting: cancel, try the next result.
+constexpr qint64 kRemoteQueueTimeoutMs = 5 * 60 * 1000;
 constexpr qint64 kAddingTimeoutMs = 10 * 60 * 1000;
 
 } // namespace
@@ -43,6 +45,8 @@ SpotifyController::SpotifyController(LibraryController &library, PlaylistControl
     Q_ASSERT(!s_instance);
     s_instance = this;
     connect(&m_slskd, &SlskdController::transfersUpdated, this, &SpotifyController::onTransfers);
+    connect(m_downloads, &QAbstractItemModel::dataChanged, this, &SpotifyController::progressChanged);
+    connect(m_downloads, &QAbstractItemModel::modelReset, this, &SpotifyController::progressChanged);
     connect(&m_slskd, &SlskdController::downloadImported, this, &SpotifyController::onImported);
     connect(&m_slskd, &SlskdController::downloadImportFailed, this, &SpotifyController::onImportFailed);
     connect(&m_slskd, &SlskdController::statusChanged, this, &SpotifyController::startWhenOnline);
@@ -56,8 +60,11 @@ SpotifyController::SpotifyController(LibraryController &library, PlaylistControl
                 continue;
             if (state == PlaylistDownloadsModel::Searching)
                 m_downloads->update(row, PlaylistDownloadsModel::NotFound, tr("Search got no answer"));
-            else if (state == PlaylistDownloadsModel::Queued && item.downloadId.isEmpty())
+            else if (state == PlaylistDownloadsModel::Queued) {
+                if (!item.downloadId.isEmpty())
+                    m_slskd.cancelTransfer(item.transfer);
                 queueNext(row);
+            }
             else if (state == PlaylistDownloadsModel::Adding)
                 m_downloads->update(row, PlaylistDownloadsModel::Failed, tr("Downloaded, but not added to the library"));
         }
@@ -92,6 +99,29 @@ int SpotifyController::downloadedCount() const
     }
     return count;
 }
+double SpotifyController::progress() const
+{
+    if (m_items.isEmpty())
+        return 0;
+    double sum = 0;
+    for (int row = 0; row < m_items.size(); ++row) {
+        switch (m_downloads->at(row).state) {
+        case PlaylistDownloadsModel::Done:
+        case PlaylistDownloadsModel::NotFound:
+        case PlaylistDownloadsModel::Failed:
+        case PlaylistDownloadsModel::Adding:
+            sum += 1;
+            break;
+        case PlaylistDownloadsModel::Downloading:
+            sum += m_items[row].fraction;
+            break;
+        default:
+            break;
+        }
+    }
+    return sum / m_items.size();
+}
+
 QString SpotifyController::errorText() const { return m_errorText; }
 QVariantMap SpotifyController::lastImport() const { return m_lastImport; }
 
@@ -105,17 +135,26 @@ void SpotifyController::importLink(const QString &link)
         setErrorText(tr("That is not a Spotify playlist or album link."));
         return;
     }
+    fetchEmbed(parsed, false);
+}
 
+void SpotifyController::fetchEmbed(const Spotify::Link &parsed, bool retried)
+{
     QNetworkRequest request(QUrl(u"https://open.spotify.com/embed/%1/%2"_s.arg(parsed.kind, parsed.id)));
     // The embed page is served to browsers; without one it may answer differently.
     request.setHeader(QNetworkRequest::UserAgentHeader, u"Mozilla/5.0 (X11; Linux x86_64) GRIM/0.1"_s);
     QNetworkReply *reply = m_network->get(request);
     setBusy(true);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, parsed] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, parsed, retried] {
         reply->deleteLater();
         setBusy(false);
         if (reply->error() != QNetworkReply::NoError) {
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            // The first request after start often fails (connection setup); a second one works.
+            if (status != 404 && !retried) {
+                fetchEmbed(parsed, true);
+                return;
+            }
             setErrorText(status == 404 ? tr("Spotify has no such playlist, or it is private.")
                                        : tr("Could not reach Spotify: %1").arg(reply->errorString()));
             return;
@@ -198,7 +237,8 @@ void SpotifyController::setErrorText(const QString &text)
     emit errorTextChanged();
 }
 
-void SpotifyController::downloadMissing(const QString &searchFormat, const QString &saveFormat)
+void SpotifyController::downloadMissing(const QString &searchFormat, const QString &saveFormat,
+                                        const QList<int> &missingRows)
 {
     if (m_running || m_tracks.isEmpty())
         return;
@@ -212,8 +252,12 @@ void SpotifyController::downloadMissing(const QString &searchFormat, const QStri
 
     QList<PlaylistDownloadsModel::Row> rows;
     m_items.clear();
+    int missingRow = -1; // lastImport.missing lists the songs without a path, in this order
     for (int i = 0; i < m_tracks.size(); ++i) {
         if (!m_paths.at(i).isEmpty())
+            continue;
+        ++missingRow;
+        if (!missingRows.isEmpty() && !missingRows.contains(missingRow))
             continue;
         Item item;
         item.order = i;
@@ -399,7 +443,10 @@ void SpotifyController::onTransfers(const QList<SlskdDownload> &downloads)
         for (const SlskdDownload &download : downloads) {
             if (download.username != item.username || download.filename != item.filename)
                 continue;
+            if (item.downloadId.isEmpty())
+                item.deadline = QDateTime::currentMSecsSinceEpoch() + kRemoteQueueTimeoutMs;
             item.downloadId = download.id;
+            item.transfer = download;
             const QString name = item.filename.section(u'\\', -1);
             if (download.state.contains(u"Succeeded"_s)) {
                 item.deadline = QDateTime::currentMSecsSinceEpoch() + kAddingTimeoutMs;
@@ -407,6 +454,7 @@ void SpotifyController::onTransfers(const QList<SlskdDownload> &downloads)
             } else if (Slskd::isTransferFinished(download.state)) {
                 queueNext(row); // errored, rejected, timed out or cancelled: the next result
             } else if (download.state.contains(u"InProgress"_s) && download.size > 0) {
+                item.fraction = double(download.bytesTransferred) / download.size;
                 m_downloads->update(row, PlaylistDownloadsModel::Downloading,
                                     u"%1  ·  %2 %"_s.arg(name).arg(download.bytesTransferred * 100 / download.size));
             }
@@ -507,11 +555,16 @@ void SpotifyController::stopDownloads()
 {
     if (!m_running)
         return;
-    // Transfers already queued in slskd keep going and still land in the library.
+    // Cancels slskd transfers too, so nothing keeps downloading (or shows in the title bar).
     for (int row = 0; row < m_items.size(); ++row) {
         const PlaylistDownloadsModel::State state = m_downloads->at(row).state;
-        if (state == PlaylistDownloadsModel::Waiting || state == PlaylistDownloadsModel::Searching)
+        if (state == PlaylistDownloadsModel::Queued || state == PlaylistDownloadsModel::Downloading) {
+            if (!m_items.at(row).transfer.id.isEmpty())
+                m_slskd.cancelTransfer(m_items.at(row).transfer);
+            m_downloads->update(row, PlaylistDownloadsModel::Failed, tr("Cancelled"));
+        } else if (state == PlaylistDownloadsModel::Waiting || state == PlaylistDownloadsModel::Searching) {
             m_downloads->update(row, PlaylistDownloadsModel::NotFound, tr("Stopped"));
+        }
     }
     m_waitingForSlskd = false;
     m_running = false;

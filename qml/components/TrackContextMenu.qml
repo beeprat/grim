@@ -79,6 +79,11 @@ CompactMenu {
     }
 
     CompactMenuItem {
+        text: qsTr("Find cover online")
+        onTriggered: LibraryController.findCover(root.urls)
+    }
+
+    CompactMenuItem {
         text: qsTr("Open containing folder")
         onTriggered: LibraryController.showInFolder(root.firstUrl)
     }

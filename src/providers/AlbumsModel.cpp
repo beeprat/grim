@@ -3,6 +3,7 @@
 #include "providers/CoverImageProvider.h"
 #include "providers/LibraryModel.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -95,20 +96,31 @@ void AlbumsModel::applyFilter()
     }
 
     // The genre list reflects the other filters, not the genre filter itself.
-    QMap<QString, QPair<QString, int>> byGenre; // lower-case key -> (name as tagged, album count)
+    struct GenreEntry
+    {
+        QString name; // as tagged
+        int count = 0;
+        QStringList covers; // up to 4, for the genre tile
+    };
+    QMap<QString, GenreEntry> byGenre; // lower-case key
     for (const Album &album : albums) {
-        auto &entry = byGenre[album.genre.toLower()];
-        if (entry.first.isEmpty())
-            entry.first = album.genre;
-        ++entry.second;
+        GenreEntry &entry = byGenre[album.genre.toLower()];
+        if (entry.name.isEmpty())
+            entry.name = album.genre;
+        ++entry.count;
+        if (entry.covers.size() < 4)
+            entry.covers.append(CoverImageProvider::urlFor(tracks.at(album.trackRows.first()).path));
     }
+    const auto genreMap = [](const QString &key, const GenreEntry &entry) {
+        return QVariantMap{{u"key"_s, key}, {u"name"_s, entry.name}, {u"count"_s, entry.count}, {u"covers"_s, entry.covers}};
+    };
     QVariantList genres;
     for (auto it = byGenre.cbegin(); it != byGenre.cend(); ++it) {
         if (!it.key().isEmpty())
-            genres.append(QVariantMap{{u"key"_s, it.key()}, {u"name"_s, it->first}, {u"count"_s, it->second}});
+            genres.append(genreMap(it.key(), *it));
     }
     if (const auto unknown = byGenre.constFind(QString()); unknown != byGenre.cend())
-        genres.append(QVariantMap{{u"key"_s, kUnknownGenre}, {u"name"_s, QString()}, {u"count"_s, unknown->second}});
+        genres.append(genreMap(kUnknownGenre, *unknown));
     if (genres != m_genres) {
         m_genres = genres;
         emit genresChanged();
@@ -314,4 +326,62 @@ QList<QUrl> AlbumsModel::urlsOf(int row) const
     for (const int trackRow : m_albums.at(row).trackRows)
         urls.append(QUrl::fromLocalFile(m_tracks.tracks().at(trackRow).path));
     return urls;
+}
+
+QVariantList AlbumsModel::albumsBy(const QString &artist, const QString &exceptTitle) const
+{
+    if (artist.isEmpty())
+        return {};
+    QList<const Album *> found;
+    for (const Album &album : m_all) {
+        if (album.artist.compare(artist, Qt::CaseInsensitive) == 0
+            && album.title.compare(exceptTitle, Qt::CaseInsensitive) != 0)
+            found.append(&album);
+    }
+    std::stable_sort(found.begin(), found.end(), [](const Album *a, const Album *b) { return a->year > b->year; });
+    return toList(found);
+}
+
+QVariantList AlbumsModel::toList(const QList<const Album *> &albums) const
+{
+    const QList<Track> &tracks = m_tracks.tracks();
+    QVariantList result;
+    for (const Album *album : albums) {
+        const QString path = tracks.at(album->trackRows.first()).path;
+        result.append(QVariantMap{{u"title"_s, album->title},
+                                  {u"artist"_s, album->artist},
+                                  {u"year"_s, album->year},
+                                  {u"coverUrl"_s, CoverImageProvider::urlFor(path)},
+                                  {u"url"_s, QUrl::fromLocalFile(path)}});
+    }
+    return result;
+}
+
+QVariantList AlbumsModel::recentlyAdded(int limit) const
+{
+    // shortcut: stats one file per album on every call, fine for a few thousand albums; keep an added
+    // time in Track (LibraryIndex) if Home gets slow.
+    const QList<Track> &tracks = m_tracks.tracks();
+    QList<QPair<QDateTime, const Album *>> dated;
+    for (const Album &album : m_all) {
+        const QFileInfo info(tracks.at(album.trackRows.first()).path);
+        const QDateTime born = info.birthTime();
+        dated.append({born.isValid() ? born : info.lastModified(), &album});
+    }
+    std::stable_sort(dated.begin(), dated.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+    QList<const Album *> found;
+    for (int i = 0; i < std::min<qsizetype>(limit, dated.size()); ++i)
+        found.append(dated.at(i).second);
+    return toList(found);
+}
+
+QVariantList AlbumsModel::topRated(int limit) const
+{
+    QList<const Album *> found;
+    for (const Album &album : m_all) {
+        if (album.rating > 0)
+            found.append(&album);
+    }
+    std::stable_sort(found.begin(), found.end(), [](const Album *a, const Album *b) { return a->rating > b->rating; });
+    return toList(found.mid(0, limit));
 }

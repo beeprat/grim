@@ -229,6 +229,11 @@ QStringList LibraryDatabase::favorites() const
     return paths;
 }
 
+QStringList LibraryDatabase::metaPaths() const
+{
+    return m_meta.keys();
+}
+
 QList<Playlist> LibraryDatabase::playlists() const
 {
     QSqlQuery query(database());

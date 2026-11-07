@@ -176,6 +176,18 @@ Rectangle {
         }
     }
 
+    // What Soulseek is downloading now, centered, so background downloads show anywhere (the update
+    // pill takes the spot while it shows).
+    Label {
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, 360)
+        visible: text !== "" && !updateNote.visible
+        text: SlskdController.currentDownload
+        elide: Text.ElideMiddle
+        font.pixelSize: 12
+        opacity: 0.6
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 16

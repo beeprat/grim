@@ -1,6 +1,7 @@
 #pragma once
 
-#include "core/AudioConverter.h"
+#include "core/DownloadConverter.h"
+#include "core/CoverFetcher.h"
 #include "core/SlskdClient.h"
 #include "core/SlskdRunner.h"
 #include "models/Track.h"
@@ -50,9 +51,13 @@ class SlskdController : public QObject
     Q_PROPERTY(bool searching READ searching NOTIFY searchingChanged FINAL)
     Q_PROPERTY(int responseCount READ responseCount NOTIFY searchingChanged FINAL)
     Q_PROPERTY(QString errorText READ errorText NOTIFY errorTextChanged FINAL)
+    // The file downloading now, "name  ·  42 %" (plus "+N" for others going); empty while none.
+    Q_PROPERTY(QString currentDownload READ currentDownload NOTIFY currentDownloadChanged FINAL)
     Q_PROPERTY(SearchResultsModel *results READ results CONSTANT FINAL)
     Q_PROPERTY(SearchGroupsModel *groups READ groups CONSTANT FINAL)
     Q_PROPERTY(DownloadsModel *downloads READ downloads CONSTANT FINAL)
+    // grim. can download ffmpeg itself (Windows); elsewhere the user installs it from the system's packages.
+    Q_PROPERTY(bool canDownloadFfmpeg READ canDownloadFfmpeg CONSTANT FINAL)
 
 public:
     enum Status {
@@ -90,9 +95,11 @@ public:
     bool searching() const;
     int responseCount() const;
     QString errorText() const;
+    QString currentDownload() const { return m_currentDownload; }
     SearchResultsModel *results() const;
     SearchGroupsModel *groups() const;
     DownloadsModel *downloads() const;
+    bool canDownloadFfmpeg() const;
 
     // Stores the Soulseek login (the password in the system's credential store), downloads slskd if needed
     // and (re)starts it. An empty password keeps the stored one.
@@ -112,6 +119,11 @@ public:
     Q_INVOKABLE void clearFinishedDownloads();
     // Stops one running download; it stays listed as cancelled until cleared.
     Q_INVOKABLE void cancelDownload(int row);
+    void cancelTransfer(const SlskdDownload &download);
+    // Answers to ffmpegNeeded: convert the waiting downloads (downloading ffmpeg first where supported), or
+    // add them to the library as downloaded, as later ones this session.
+    Q_INVOKABLE void installFfmpeg();
+    Q_INVOKABLE void keepOriginals();
 
     // For batch downloads (SpotifyController), apart from the Soulseek page's search: one search,
     // its results once it is complete (or after kBatchSearchMs). Empty list on failure.
@@ -126,13 +138,18 @@ signals:
     void downloadFormatChanged();
     void searchingChanged();
     void errorTextChanged();
+    void currentDownloadChanged();
     // A converted download now sits in the library folder at `path`.
     void trackImported(const QString &path);
     // The same, with the slskd download it came from; or why it did not get there.
     void downloadImported(const QString &downloadId, const QString &path);
     void downloadImportFailed(const QString &downloadId, const QString &reason);
+    // The same, for the "song added" notification at the top of the window.
+    void songAdded(const QString &artist, const QString &title);
     // Every refresh of slskd's transfer list.
     void transfersUpdated(const QList<SlskdDownload> &downloads);
+    // A download should be converted but ffmpeg is missing; it waits for installFfmpeg() or keepOriginals().
+    void ffmpegNeeded();
 
 private:
     void pollSearch();
@@ -167,12 +184,12 @@ private:
     QString m_managedApiKey; // random, accepted only from 127.0.0.1
     std::function<QList<Track>()> m_libraryTracks;
     bool m_stopped = false;   // stopped from the title bar
-    AudioConverter *m_converter;
+    DownloadConverter *m_converter; // format conversion and ffmpeg, before importToLibrary
+    CoverFetcher *m_covers;
     Status m_status = Checking;
 
     QString m_downloadsDirectory;           // local folder slskd moves finished files to
     QSet<QString> m_handledDownloads;       // download ids already sent to (or skipped by) conversion
-    QHash<QString, QString> m_conversions;  // source path -> download id
 
     struct BatchSearch
     {
@@ -188,4 +205,5 @@ private:
     bool m_searching = false;
     int m_responseCount = 0;
     QString m_errorText;
+    QString m_currentDownload;
 };

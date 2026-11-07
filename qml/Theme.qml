@@ -70,6 +70,9 @@ QtObject {
     readonly property color selected: Qt.rgba(1, 1, 1, 0.12)
     readonly property color subtle: Qt.rgba(1, 1, 1, 0.08) // badges, placeholders, outlines
     readonly property color danger: "#e57373" // destructive actions (deletions)
+    readonly property color muted: "#9e9e9e" // grey text that must stay readable (locked medals)
+    // Medal tiers by rarity: bronze, silver, gold, platinum, diamond.
+    readonly property var medalColors: ["#cd7f32", "#c0c0c0", "#ffd54f", "#80deea", "#b388ff"]
 
     property Settings store: Settings {
         category: "theme"

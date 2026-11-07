@@ -1,5 +1,7 @@
 #include "core/TagReader.h"
 
+#include "core/DownloadTagger.h"
+
 #include <fileref.h>
 #include <tag.h>
 #include <tpropertymap.h>
@@ -32,9 +34,10 @@ Track read(const QString &filePath)
                                TagLib::AudioProperties::Average);
     if (!file.isNull()) {
         if (const TagLib::Tag *tag = file.tag()) {
-            track.title = toQString(tag->title());
+            // Edition notes ("(Remastered 2009)", "[Deluxe Edition]") never show.
+            track.title = DownloadTagger::cleanTitle(toQString(tag->title()));
             track.artist = toQString(tag->artist());
-            track.album = toQString(tag->album());
+            track.album = DownloadTagger::cleanTitle(toQString(tag->album()));
             track.year = static_cast<int>(tag->year());
             track.genre = toQString(tag->genre());
             track.trackNumber = static_cast<int>(tag->track());

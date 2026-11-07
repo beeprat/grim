@@ -41,6 +41,9 @@ class SpotifyController : public QObject
     Q_PROPERTY(bool downloading READ downloading NOTIFY downloadingChanged FINAL)
     // Songs downloaded and added so far, of the missing ones.
     Q_PROPERTY(int downloadedCount READ downloadedCount NOTIFY downloadingChanged FINAL)
+    // 0..1 over all songs to fetch: finished ones (added, not found, failed) count whole, a download in
+    // progress by its share of bytes.
+    Q_PROPERTY(double progress READ progress NOTIFY progressChanged FINAL)
 
 public:
     static constexpr int kParallelSearches = 3;
@@ -58,12 +61,15 @@ public:
     PlaylistDownloadsModel *downloads() const;
     bool downloading() const;
     int downloadedCount() const;
+    double progress() const;
 
     Q_INVOKABLE void importLink(const QString &link);
     Q_INVOKABLE void clearResult();
     // Fetches the last import's missing songs. `searchFormat`: file type to prefer ("flac", "mp3",
     // "" = any); `saveFormat`: what they become ("original" or an AudioConverter format).
-    Q_INVOKABLE void downloadMissing(const QString &searchFormat, const QString &saveFormat);
+    // `missingRows`: indices into lastImport.missing to fetch; empty fetches them all.
+    Q_INVOKABLE void downloadMissing(const QString &searchFormat, const QString &saveFormat,
+                                     const QList<int> &missingRows = {});
     // One song again: a fresh search (not found / failed) or the next search result (done, but the
     // wrong file).
     Q_INVOKABLE void retry(int row);
@@ -74,8 +80,11 @@ signals:
     void errorTextChanged();
     void lastImportChanged();
     void downloadingChanged();
+    void progressChanged();
 
 private:
+    // GETs the embed page for `parsed`; one retry on a network error (the first request often fails).
+    void fetchEmbed(const Spotify::Link &parsed, bool retried);
     struct Item
     {
         int order = -1; // position in the Spotify list
@@ -85,8 +94,10 @@ private:
         QString username;                  // the queued file
         QString filename;
         QString downloadId;
+        SlskdDownload transfer; // as last listed, to cancel it
         QString path; // in the library, once done
         qint64 deadline = 0; // search timeout (ms since epoch)
+        double fraction = 0; // bytes received / file size while downloading
     };
 
     void startWhenOnline();

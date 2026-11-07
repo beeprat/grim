@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(MusicPlayer VERSION 0.3.1 LANGUAGES C CXX)
+project(MusicPlayer VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,6 +75,14 @@ add_library(musicplayer_core STATIC
     src/core/SlskdClient.cpp
     src/core/AudioConverter.h
     src/core/AudioConverter.cpp
+    src/core/DownloadConverter.h
+    src/core/DownloadConverter.cpp
+    src/core/FfmpegInstaller.h
+    src/core/FfmpegInstaller.cpp
+    src/core/LibrarySidecar.h
+    src/core/LibrarySidecar.cpp
+    src/core/CoverFetcher.h
+    src/core/CoverFetcher.cpp
     src/core/CoverCache.h
     src/core/CoverCache.cpp
     src/core/LibraryDatabase.h
@@ -134,7 +142,7 @@ target_link_libraries(musicplayer_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network
     PUBLIC miniaudio # AacSource.h exposes ma_data_source
     PRIVATE tag musicplayer_warnings
-    PRIVATE Qt6::CorePrivate) # QZipReader unpacks the slskd download
+    PRIVATE Qt6::CorePrivate) # QZipReader unpacks the slskd and ffmpeg downloads
 # AAC/M4A decoding: Media Foundation on Windows, FFmpeg elsewhere (picked in AacSource.h).
 if(WIN32)
     target_sources(musicplayer_core PRIVATE src/audio/MfAudioSource.h src/audio/MfAudioSource.cpp)
@@ -248,6 +256,7 @@ qt_add_qml_module(MusicPlayer
         qml/components/CompactMenuItem.qml
         qml/components/TitleBar.qml
         qml/components/VolumeControl.qml
+        qml/pages/HomePage.qml
         qml/pages/LibraryPage.qml
         qml/pages/PlaylistsPage.qml
         qml/pages/SettingsPage.qml
@@ -255,6 +264,7 @@ qt_add_qml_module(MusicPlayer
         qml/pages/StatisticsPage.qml
     RESOURCES
         qml/icons/app.svg
+        qml/icons/home.svg
         qml/icons/back.svg
         qml/icons/lyrics.svg
         qml/icons/close.svg
@@ -272,6 +282,7 @@ qt_add_qml_module(MusicPlayer
         qml/icons/library.svg
         qml/icons/music_note.svg
         qml/icons/heart.svg
+        qml/icons/medal.svg
         qml/icons/heart_outline.svg
         qml/icons/next.svg
         qml/icons/playlist.svg
@@ -368,6 +379,9 @@ add_test(NAME tst_tageditor COMMAND tst_tageditor)
 qt_add_executable(tst_phonesync tests/tst_phonesync.cpp)
 target_link_libraries(tst_phonesync PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
 add_test(NAME tst_phonesync COMMAND tst_phonesync)
+# Qt's DLLs (Qt6Test.dll and the rest) for tests run from the build folder.
+set_tests_properties(tst_trackpicker tst_spotifymatch tst_equalizer tst_tageditor tst_phonesync PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_statsdatabase tests/tst_statsdatabase.cpp)
 target_link_libraries(tst_statsdatabase PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
@@ -419,6 +433,11 @@ target_link_libraries(tst_stringstranslator PRIVATE musicplayer_core Qt6::Test m
 add_test(NAME tst_stringstranslator COMMAND tst_stringstranslator)
 set_tests_properties(tst_stringstranslator PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+qt_add_executable(tst_coverfetcher tests/tst_coverfetcher.cpp)
+target_link_libraries(tst_coverfetcher PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_coverfetcher COMMAND tst_coverfetcher)
+set_tests_properties(tst_coverfetcher PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_librarydatabase tests/tst_librarydatabase.cpp)
 target_link_libraries(tst_librarydatabase PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)

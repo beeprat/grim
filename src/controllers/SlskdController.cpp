@@ -4,7 +4,10 @@
 #include "core/CredentialStore.h"
 #include "core/DownloadTagger.h"
 #include "core/LibraryFiles.h"
+#include "core/TagEditor.h"
 #include "core/TagReader.h"
+
+#include <utility>
 
 #include <QDebug>
 #include <QDir>
@@ -30,7 +33,6 @@ constexpr int kStatusPollMs = 2000;
 constexpr int kManagedStartupChecks = 20;
 
 const auto kDownloadFormatKey = "slskd/downloadFormat"_L1;
-const auto kOriginalFormat = "original"_L1;
 // searchFiles(): slskd's search timeout (time without new responses), the poll interval, and when a
 // running search is stopped so its responses can be read (slskd lists them only once complete):
 // after kBatchSearchMs of running, or kBatchSearchEnoughMs with kBatchSearchEnough responses.
@@ -59,15 +61,17 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     , m_downloadsTimer(new QTimer(this))
     , m_statusTimer(new QTimer(this))
     , m_runner(new SlskdRunner(this))
-    , m_converter(new AudioConverter(this))
+    , m_converter(new DownloadConverter(this))
+    , m_covers(new CoverFetcher(this))
 {
     Q_ASSERT(!s_instance);
     s_instance = this;
 
     const QSettings stored;
     m_downloadFormat = stored.value(kDownloadFormatKey, u"m4a"_s).toString();
-    if (m_downloadFormat != kOriginalFormat && !AudioConverter::formats().contains(m_downloadFormat))
+    if (!DownloadConverter::isValidFormat(m_downloadFormat))
         m_downloadFormat = u"m4a"_s;
+    m_converter->setFormat(m_downloadFormat);
     m_username = stored.value(kUsernameKey).toString();
     m_stopped = stored.value(kStoppedKey, false).toBool();
     m_webUsername = stored.value(kWebUsernameKey).toString();
@@ -98,23 +102,13 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
     connect(m_searchTimer, &QTimer::timeout, this, &SlskdController::pollSearch);
     m_downloadsTimer->setInterval(kDownloadsPollMs);
     connect(m_downloadsTimer, &QTimer::timeout, this, &SlskdController::refreshDownloads);
-    connect(m_converter, &AudioConverter::started, this, [this](const QString &source, const QString &format) {
-        m_downloads->setNote(m_conversions.value(source), tr("Converting to %1…").arg(format.toUpper()));
+    connect(m_converter, &DownloadConverter::note, m_downloads, &DownloadsModel::setNote);
+    connect(m_converter, &DownloadConverter::ready, this, &SlskdController::importToLibrary);
+    connect(m_converter, &DownloadConverter::failed, this, &SlskdController::downloadImportFailed);
+    connect(m_converter, &DownloadConverter::ffmpegNeeded, this, &SlskdController::ffmpegNeeded);
+    connect(m_converter, &DownloadConverter::installFailed, this, [this](const QString &error) {
+        setErrorText(tr("Could not download ffmpeg: %1").arg(error));
     });
-    connect(m_converter, &AudioConverter::finished, this,
-            [this](const QString &source, const QString &target, bool ok, const QString &error) {
-                const QString downloadId = m_conversions.take(source);
-                if (!ok) {
-                    m_downloads->setNote(downloadId, tr("Conversion failed: %1").arg(error));
-                    emit downloadImportFailed(downloadId, tr("Conversion failed: %1").arg(error));
-                    return;
-                }
-                // Recycle Bin rather than a hard delete, so a bad conversion is recoverable.
-                if (!QFile::moveToTrash(source))
-                    QFile::remove(source);
-                importToLibrary(target, downloadId,
-                                tr("Converted to %1 and added to the library").arg(QFileInfo(target).suffix().toUpper()));
-            });
 
     m_statusTimer->setInterval(kStatusPollMs);
     connect(m_statusTimer, &QTimer::timeout, this, [this] {
@@ -330,9 +324,10 @@ QString SlskdController::downloadFormat() const
 
 void SlskdController::setDownloadFormat(const QString &format)
 {
-    if (format == m_downloadFormat || (format != kOriginalFormat && !AudioConverter::formats().contains(format)))
+    if (format == m_downloadFormat || !DownloadConverter::isValidFormat(format))
         return;
     m_downloadFormat = format;
+    m_converter->setFormat(format);
     QSettings().setValue(kDownloadFormatKey, format);
     emit downloadFormatChanged();
 }
@@ -363,6 +358,10 @@ void SlskdController::checkStatus()
             setStatus(Online);
             break;
         }
+        // A failed request stopped the transfer poll; still reachable, so resume it or queued
+        // downloads look stuck forever.
+        if ((m_status == Online || m_status == NotLoggedIn) && !m_downloadsTimer->isActive())
+            refreshDownloads();
     });
 }
 
@@ -503,6 +502,23 @@ void SlskdController::refreshDownloads()
         // Listeners learn the download ids first: "Keep original" imports inside convertFinished.
         emit transfersUpdated(downloads);
         convertFinished(downloads);
+        QString current;
+        int others = 0;
+        for (const SlskdDownload &download : std::as_const(downloads)) {
+            if (!download.state.contains("InProgress"_L1) || download.size <= 0)
+                continue;
+            if (current.isEmpty())
+                current = u"%1  ·  %2 %"_s.arg(download.filename.section(u'\\', -1))
+                              .arg(download.bytesTransferred * 100 / download.size);
+            else
+                ++others;
+        }
+        if (others > 0)
+            current += u"  +%1"_s.arg(others);
+        if (current != m_currentDownload) {
+            m_currentDownload = current;
+            emit currentDownloadChanged();
+        }
         m_downloads->setDownloads(std::move(downloads));
         // Keep polling only while something is still moving.
         if (m_downloads->hasActive())
@@ -543,17 +559,24 @@ void SlskdController::convertFinished(const QList<SlskdDownload> &downloads)
             emit downloadImportFailed(download->id, tr("Not in slskd's downloads folder"));
             continue;
         }
-        // Kept as downloaded: "original" chosen, or already in the chosen format (no re-encode).
-        if (m_downloadFormat == kOriginalFormat
-            || found->suffix().compare(m_downloadFormat, Qt::CaseInsensitive) == 0) {
-            importToLibrary(found->absoluteFilePath(), download->id, tr("Added to the library"));
-            continue;
-        }
-        m_conversions.insert(found->absoluteFilePath(), download->id);
-        m_downloads->setNote(download->id, tr("Waiting to convert…"));
-        m_converter->setFormat(m_downloadFormat);
-        m_converter->convert(found->absoluteFilePath());
+        m_converter->process(found->absoluteFilePath(), download->id);
     }
+}
+
+bool SlskdController::canDownloadFfmpeg() const
+{
+    return DownloadConverter::canDownloadFfmpeg();
+}
+
+void SlskdController::installFfmpeg()
+{
+    setErrorText({});
+    m_converter->installFfmpeg();
+}
+
+void SlskdController::keepOriginals()
+{
+    m_converter->keepOriginals();
 }
 
 void SlskdController::importToLibrary(const QString &path, const QString &downloadId, const QString &doneNote)
@@ -592,9 +615,29 @@ void SlskdController::importToLibrary(const QString &path, const QString &downlo
         emit downloadImportFailed(downloadId, tr("Not added to the library: %1").arg(error));
         return;
     }
-    m_downloads->setNote(downloadId, doneNote);
-    emit trackImported(moved);
-    emit downloadImported(downloadId, moved);
+    const auto announce = [this, downloadId, doneNote, moved] {
+        m_downloads->setNote(downloadId, doneNote);
+        emit trackImported(moved);
+        emit downloadImported(downloadId, moved);
+        const Track added = TagReader::read(moved);
+        emit songAdded(added.artist, added.title.isEmpty() ? QFileInfo(moved).completeBaseName() : added.title);
+    };
+    // No cover in the file, next to it or on the album it joined: look one up online first.
+    if (!cover.isEmpty() || !TagReader::readCover(moved).isEmpty()) {
+        announce();
+        return;
+    }
+    const Track placed = TagReader::read(moved);
+    m_downloads->setNote(downloadId, tr("Looking for the album cover…"));
+    m_covers->fetch(placed.artist, placed.album,
+                    [moved, announce](const QByteArray &found) {
+                        if (!found.isEmpty()) {
+                            const QString error = TagEditor::write(moved, {}, TagEditor::Cover::Replace, found);
+                            if (!error.isEmpty())
+                                qWarning() << "SlskdController: could not add the cover to" << moved << error;
+                        }
+                        announce();
+                    });
 }
 
 void SlskdController::clearFinishedDownloads()
@@ -608,6 +651,11 @@ void SlskdController::cancelDownload(int row)
     const SlskdDownload download = m_downloads->at(row);
     if (download.id.isEmpty())
         return;
+    m_client->cancelDownload(download, [this] { refreshDownloads(); });
+}
+
+void SlskdController::cancelTransfer(const SlskdDownload &download)
+{
     m_client->cancelDownload(download, [this] { refreshDownloads(); });
 }
 

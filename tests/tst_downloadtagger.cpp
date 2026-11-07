@@ -90,6 +90,12 @@ private slots:
         QTest::newRow("bracket year") << u"Help! (Remastered 2009)"_s << u"Help!"_s;
         QTest::newRow("bracket remaster") << u"Help! (2015 Remaster)"_s << u"Help!"_s;
         QTest::newRow("square deluxe") << u"Help! [Deluxe Edition]"_s << u"Help!"_s;
+        QTest::newRow("japanese version") << u"Three Days Grace (Japanese Version)"_s << u"Three Days Grace"_s;
+        QTest::newRow("super deluxe") << u"Abbey Road (Super Deluxe)"_s << u"Abbey Road"_s;
+        QTest::newRow("expanded") << u"Abbey Road [Expanded]"_s << u"Abbey Road"_s;
+        QTest::newRow("acoustic version stays") << u"Help! (Acoustic Version)"_s << u"Help! (Acoustic Version)"_s;
+        QTest::newRow("special edition") << u"Help! (Special Edition)"_s << u"Help!"_s;
+        QTest::newRow("special stays") << u"Special Needs"_s << u"Special Needs"_s;
         QTest::newRow("dash remastered") << u"Help! - Remastered 2009"_s << u"Help!"_s;
         QTest::newRow("dash remaster") << u"Help! - 2015 Remaster"_s << u"Help!"_s;
         QTest::newRow("en dash deluxe") << u"Help! – Deluxe"_s << u"Help!"_s;

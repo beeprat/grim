@@ -19,7 +19,9 @@ namespace {
 
 // An edition note: remaster(ed), deluxe, anniversary, with whatever else the bracket or dash part holds
 // ("2009", "Edition", "50th"). An anniversary edition's tracks thus join the original album.
-const QString kEdition = u"(?:remaster(?:ed)?|deluxe|anniversary)"_s;
+// "Version" only after a release word: "(Acoustic Version)" or "(Live Version)" is a different song.
+const QString kEdition = u"(?:remaster(?:ed)?|deluxe|anniversary|expanded|special|edition|"
+                         "(?:japanese|japan|uk|us|international|european|bonus tracks?|explicit|clean|expanded) version)"_s;
 
 // The value most of `values` have (ignoring empty ones); ties go to the first seen.
 template<typename T, typename IsEmpty>

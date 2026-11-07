@@ -6,7 +6,7 @@
 
 class QProcess;
 
-// Converts audio files next to the source, one at a time, with ffmpeg (from PATH): to M4A
+// Converts audio files next to the source, one at a time, with ffmpeg (grim.'s own copy, else PATH): to M4A
 // (AAC 320 kbps, the default), MP3 (320 kbps) or FLAC. Tags and cover art are copied with
 // TagLib afterwards, because ffmpeg's muxers drop freeform tags such as ReplayGain.
 // The source file is kept.
@@ -19,7 +19,7 @@ public:
     // Stops a running ffmpeg and deletes its unfinished output.
     ~AudioConverter() override;
 
-    // Empty if ffmpeg is not on PATH.
+    // Empty if ffmpeg is neither installed by grim. nor on PATH.
     static QString ffmpegPath();
     // Target formats by file extension: "m4a", "mp3", "flac".
     static QStringList formats();
