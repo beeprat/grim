@@ -5,7 +5,7 @@ takođe može da pretražuje i preuzima muziku sa Soulseek (via [slskd](https://
 Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 
 ## <img width="1920" height="1050" alt="Screenshot 2026-11-08 011119" src="https://github.com/user-attachments/assets/7fe8b259-e103-4aa1-aa47-0bcdb442cd8a" />
-## <img width="1920" height="1050" alt="Screenshot 2026-11-08 011119" src="https://github.com/user-attachments/assets/5b9c3347-a9e4-4ef3-bc71-b7b48f3cec1f" />
+## <img width="1920" height="1050" alt="Screenshot 2026-11-08 010501" src="https://github.com/user-attachments/assets/191fd0b7-3631-4753-a84c-62641afffd7c" />
 ## <img width="1920" height="1050" alt="Screenshot 2026-11-08 010723" src="https://github.com/user-attachments/assets/9bd5dc84-9ad4-4410-8e12-4a75781b9dd5" />
 
 
