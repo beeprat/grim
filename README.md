@@ -4,12 +4,18 @@ takođe može da pretražuje i preuzima muziku sa Soulseek (via [slskd](https://
 
 Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 
-## <img width="1920" height="1050" alt="screenshot 1" src="https://github.com/user-attachments/assets/b0a7c2ea-5422-45e2-991a-be71b95c7740" />
-## <img width="1920" height="1050" alt="screenshot 2" src="https://github.com/user-attachments/assets/b73febdc-cccc-43bd-8220-3550d629800d" />
-## <img width="1920" height="1050" alt="screenshot 3" src="https://github.com/user-attachments/assets/c5cf9b77-9d3f-431a-bc7e-8ab727b132cb" />
+## <img width="1920" height="1050" alt="Screenshot 2026-11-08 011119" src="https://github.com/user-attachments/assets/7fe8b259-e103-4aa1-aa47-0bcdb442cd8a" />
+## <img width="1920" height="1050" alt="Screenshot 2026-11-08 011119" src="https://github.com/user-attachments/assets/5b9c3347-a9e4-4ef3-bc71-b7b48f3cec1f" />
+## <img width="1920" height="1050" alt="Screenshot 2026-11-08 010723" src="https://github.com/user-attachments/assets/9bd5dc84-9ad4-4410-8e12-4a75781b9dd5" />
+
 
 ## features:
 - soulseek preuzimanja + konvertovanje (potreban ffmpeg)
+- spotify import (uz soulseek)
+- 16-band equalizer.
+- discord rich presence.
+- last.fm scrobbling.
+- metadata editovanje.
 - statistike sa top trakama, albumima i izvođačima + export/import.
 - sinhronizovani tekstovi. (čitanje sa tagova fajla, `.lrc` fajla ili preko [LRCLIB](https://lrclib.net))
 - ocenjivanje pesama = prosečna ocena albuma.
@@ -20,8 +26,6 @@ Native C++20 i Qt 6 (QML). bez Electron, bez web view, bez naloga.
 - speed i reverb slideri.
 - gapless playback.
 - crossfade.
-- last.fm scrobbling.
-- discord rich presence. 
 - translation support.
 
 ## requirements:
