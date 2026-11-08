@@ -79,7 +79,7 @@ QString albumKey(const QString &album)
     // "- Bonus Track Version", or the same words trailing without brackets ("Abbey Road Super Deluxe").
     static const QString extra =
         u"(?:remaster(?:ed)?|deluxe|anniversary|expanded|edition|version|bonus|reissue|collector'?s?|legacy|"
-        "special|super|mono|stereo)"_s;
+        "special|super|mono|stereo|cd|lp|vinyl)"_s;
     static const QRegularExpression bracket(u"\\s*[\\(\\[][^\\)\\]]*\\b"_s + extra + u"\\b[^\\)\\]]*[\\)\\]]"_s,
                                             QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression dash(u"\\s+[-–—:]\\s+[^-–—:]*\\b"_s + extra + u"\\b[^-–—:]*$"_s,
@@ -106,8 +106,13 @@ QString artistKey(const QString &artist)
     return key;
 }
 
-QString cleanFileName(const QString &fileName, int trackNumber)
+QString cleanFileName(const QString &original, int trackNumber)
 {
+    // Trailing format or catalog tags before the extension: " - [ECLEC 22495] [CD]", "[FLAC]".
+    static const QRegularExpression tags(
+        u"(?:\\s*-)?(?:\\s*\\[(?:(?i:cd|lp|vinyl|flac|mp3|web)|[A-Z]{2,6}[- ]?\\d{3,})\\])+(?=\\.[^.]+$)"_s);
+    QString fileName = original;
+    fileName.remove(tags);
     // "01 ", "01. ", "01 - ", "1-01 " (disc-track): the last number is the track.
     static const QRegularExpression number(u"^(?:\\d{1,2}[-.])?(\\d{1,3})(?:\\s*[-–._]\\s*|\\s+)"_s);
     const QRegularExpressionMatch found = number.match(fileName);

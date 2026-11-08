@@ -2,6 +2,7 @@
 
 #include "controllers/SettingsController.h"
 #include "core/CoverFetcher.h"
+#include "core/DownloadTagger.h"
 #include "core/LibraryDatabase.h"
 #include "core/LibraryFiles.h"
 #include "core/ReplayGain.h"
@@ -9,7 +10,9 @@
 #include "providers/CoverImageProvider.h"
 #include "core/TagReader.h"
 
+#include <QDateTime>
 #include <QDir>
+#include <QSet>
 #ifndef Q_OS_WIN
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -30,6 +33,16 @@
 #include <QtConcurrentRun>
 
 
+namespace {
+
+// Paths reach us with either separator and, on Windows, any case.
+QString unseenKey(const QString &path)
+{
+    return QDir::fromNativeSeparators(path).toLower();
+}
+
+} // namespace
+
 LibraryController::LibraryController(SettingsController &settings, LibraryDatabase &database, QObject *parent)
     : QObject(parent)
     , m_settings(settings)
@@ -44,6 +57,8 @@ LibraryController::LibraryController(SettingsController &settings, LibraryDataba
     m_tracks->setRatingSource([&database](const QString &path) { return database.rating(path); });
     for (const QString &key : QSettings().value(QStringLiteral("library/unseen")).toStringList())
         m_unseen.insert(key);
+    for (const QString &key : QSettings().value(QStringLiteral("library/updated")).toStringList())
+        m_updated.insert(key);
 
     m_filterDelay = new QTimer(this);
     m_filterDelay->setSingleShot(true);
@@ -60,6 +75,29 @@ LibraryController::LibraryController(SettingsController &settings, LibraryDataba
             return;
         }
         const LibraryIndex::ScanResult result = m_scan.result();
+        // Files copied in by hand get the "New" badge like Soulseek imports; addFile() ones already had it.
+        if (!result.added.isEmpty()) {
+            QSet<QString> listed;
+            for (const Track &track : m_tracks->tracks())
+                listed.insert(unseenKey(track.path));
+            const qsizetype before = m_unseen.size();
+            for (const QString &path : result.added) {
+                if (!listed.contains(unseenKey(path)))
+                    m_unseen.insert(unseenKey(path));
+            }
+            if (m_unseen.size() != before) {
+                QSettings().setValue(QStringLiteral("library/unseen"), QStringList(m_unseen.begin(), m_unseen.end()));
+                emit unseenChanged();
+            }
+        }
+        if (!result.updated.isEmpty()) {
+            for (const QString &path : result.updated) {
+                if (!m_unseen.contains(unseenKey(path)))
+                    m_updated.insert(unseenKey(path));
+            }
+            QSettings().setValue(QStringLiteral("library/updated"), QStringList(m_updated.begin(), m_updated.end()));
+            emit unseenChanged();
+        }
         // Unchanged since the index was shown: no model reset, so views keep their scroll position.
         if (result.changed) {
             const QList<Track> tracks = LibraryIndex::tracksOf(result.entries);
@@ -209,15 +247,7 @@ bool LibraryController::isFavorite(const QUrl &fileUrl) const
     return m_database.isFavorite(fileUrl.toLocalFile());
 }
 
-namespace {
 
-// Paths reach us with either separator and, on Windows, any case.
-QString unseenKey(const QString &path)
-{
-    return QDir::fromNativeSeparators(path).toLower();
-}
-
-} // namespace
 
 int LibraryController::unseenCount() const
 {
@@ -230,13 +260,41 @@ bool LibraryController::anyUnseen(const QList<QUrl> &fileUrls) const
                        [this](const QUrl &url) { return m_unseen.contains(unseenKey(url.toLocalFile())); });
 }
 
+int LibraryController::updatedCount() const
+{
+    return int(m_updated.size());
+}
+
+bool LibraryController::anyUpdated(const QList<QUrl> &fileUrls) const
+{
+    return std::any_of(fileUrls.begin(), fileUrls.end(),
+                       [this](const QUrl &url) { return m_updated.contains(unseenKey(url.toLocalFile())); });
+}
+
+void LibraryController::clearUpdated()
+{
+    if (m_updated.isEmpty())
+        return;
+    m_updated.clear();
+    QSettings().remove(QStringLiteral("library/updated"));
+    emit unseenChanged();
+}
+
 void LibraryController::markSeen(const QList<QUrl> &fileUrls)
 {
     bool changed = false;
-    for (const QUrl &url : fileUrls)
+    bool updated = false;
+    for (const QUrl &url : fileUrls) {
         changed |= m_unseen.remove(unseenKey(url.toLocalFile()));
-    if (!changed)
+        updated |= m_updated.remove(unseenKey(url.toLocalFile()));
+    }
+    if (updated)
+        QSettings().setValue(QStringLiteral("library/updated"), QStringList(m_updated.begin(), m_updated.end()));
+    if (!changed) {
+        if (updated)
+            emit unseenChanged();
         return;
+    }
     // shortcut: a file deleted or renamed before it is seen stays listed, harmless; prune if it grows.
     QSettings().setValue(QStringLiteral("library/unseen"), QStringList(m_unseen.begin(), m_unseen.end()));
     emit unseenChanged();
@@ -322,8 +380,8 @@ void LibraryController::startScan(bool full)
     const QString folder = m_settings.libraryFolder();
     const QString indexFile = m_indexFile;
     m_scan.setFuture(QtConcurrent::run([folder, indexFile, full] {
-        const LibraryIndex::Known known = full ? LibraryIndex::Known() : LibraryIndex::load(indexFile, folder);
-        LibraryIndex::ScanResult result = LibraryIndex::scan(folder, known, &TagReader::read);
+        const LibraryIndex::Known known = LibraryIndex::load(indexFile, folder);
+        LibraryIndex::ScanResult result = LibraryIndex::scan(folder, known, &TagReader::read, !full);
         if (result.changed || full)
             LibraryIndex::save(indexFile, folder, result.entries);
         // A full scan always replaces the shown tracks (they may have been edited in place).
@@ -416,6 +474,40 @@ void LibraryController::findCover(const QList<QUrl> &fileUrls)
     });
 }
 
+bool LibraryController::albumCoverDiffers(const QList<QUrl> &fileUrls, const QList<QUrl> &albumUrls) const
+{
+    QStringList album;
+    for (const QUrl &url : albumUrls)
+        album.append(url.toLocalFile());
+    const QByteArray cover = DownloadTagger::majorityCover(album);
+    return !cover.isEmpty() && std::any_of(fileUrls.begin(), fileUrls.end(), [&cover](const QUrl &url) {
+        return TagReader::readCover(url.toLocalFile()) != cover;
+    });
+}
+
+void LibraryController::useAlbumCover(const QList<QUrl> &fileUrls, const QList<QUrl> &albumUrls)
+{
+    QStringList album;
+    for (const QUrl &url : albumUrls)
+        album.append(url.toLocalFile());
+    const QByteArray cover = DownloadTagger::majorityCover(album);
+    if (cover.isEmpty())
+        return;
+    QStringList written;
+    for (const QUrl &url : fileUrls) {
+        const QString path = url.toLocalFile();
+        if (TagReader::readCover(path) != cover && TagEditor::write(path, {}, TagEditor::Cover::Replace, cover).isEmpty())
+            written.append(path);
+    }
+    if (written.isEmpty())
+        return;
+    CoverImageProvider::bumpRevision();
+    m_tracks->removeTracks(written);
+    m_pickerTracks->removeTracks(written);
+    for (const QString &path : std::as_const(written))
+        addFile(path);
+}
+
 QString LibraryController::writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,
                                      const QUrl &coverUrl)
 {
@@ -461,7 +553,9 @@ void LibraryController::addFile(const QString &path)
 {
     if (!LibraryFiles::isPlayable(path))
         return;
-    const Track track = TagReader::read(path);
+    Track track = TagReader::read(path);
+    track.addedMs = QDateTime::currentMSecsSinceEpoch(); // a file already listed keeps its own (addTrack)
+    track.changedMs = track.addedMs;
     m_tracks->addTrack(track);
     m_pickerTracks->addTrack(track);
     // A running scan may have passed this folder already; its result would drop the file.

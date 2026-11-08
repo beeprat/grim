@@ -199,9 +199,11 @@ Card {
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: 6
-                            visible: !row.songs && LibraryController.unseenCount > 0
-                                     && LibraryController.anyUnseen(LibraryController.albums.urlsOf(
-                                            LibraryController.albums.rowForTrack(tile.modelData.url)))
+                            readonly property var urls: LibraryController.albums.urlsOf(
+                                                            LibraryController.albums.rowForTrack(tile.modelData.url))
+                            readonly property bool isNew: LibraryController.unseenCount > 0 && LibraryController.anyUnseen(urls)
+
+                            visible: !row.songs && (isNew || LibraryController.updatedCount > 0 && LibraryController.anyUpdated(urls))
                             width: newLabel.implicitWidth + 12
                             height: newLabel.implicitHeight + 4
                             radius: height / 2
@@ -211,7 +213,7 @@ Card {
                                 id: newLabel
 
                                 anchors.centerIn: parent
-                                text: qsTr("New")
+                                text: parent.isNew ? qsTr("New") : qsTr("Updated")
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
                                 color: Theme.window

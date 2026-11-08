@@ -191,6 +191,27 @@ private:
     QString m_downloadsDirectory;           // local folder slskd moves finished files to
     QSet<QString> m_handledDownloads;       // download ids already sent to (or skipped by) conversion
 
+    // Downloads started from the Soulseek page: one still queued at its uploader after
+    // kRemoteQueueSwitchMs moves to another user with a free slot (switchSource()).
+    struct Watched
+    {
+        SlskdSearchFile file;
+        qint64 queuedSince = 0; // 0 = not seen waiting yet
+        int switches = 0;
+        bool searching = false;
+    };
+    QHash<QString, Watched> m_watched; // by watchKey(username, filename)
+    void watch(const QList<SlskdSearchFile> &files, int switches = 0);
+    void checkWatched(const QList<SlskdDownload> &downloads);
+    void switchSource(const SlskdDownload &download);
+    // Same song and format from another user with a free slot (shortest queue, then fastest);
+    // nullopt if none.
+    void findReplacement(const SlskdSearchFile &original, std::function<void(std::optional<SlskdSearchFile>)> onDone);
+    // A finished FLAC: ffmpeg compares the 16.5-19 kHz band with 13-15.5 kHz. MP3s at 192 kbps or less
+    // cut off around 16 kHz, so a much quieter top band means an MP3 turned into FLAC: the file goes
+    // to the Recycle Bin and the song downloaded from someone else. Otherwise it goes on to conversion.
+    void checkFlac(const QString &path, const QString &downloadId, std::optional<Watched> watched);
+
     struct BatchSearch
     {
         QString text;

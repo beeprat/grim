@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QSaveFile>
 #include <QJSEngine>
 #include <QStandardPaths>
@@ -150,6 +151,13 @@ void StatsController::setGenreLookup(std::function<QString(const QString &)> loo
     m_genreOf = std::move(lookup);
 }
 
+void StatsController::setLibraryData(std::function<QJsonObject(const QString &)> save,
+                                     std::function<void(const QJsonObject &, const QString &)> load)
+{
+    m_saveLibrary = std::move(save);
+    m_loadLibrary = std::move(load);
+}
+
 QVariantList StatsController::neverPlayed(const QVariantList &albums, int limit) const
 {
     const QSet<QString> played = m_database.isOpen() ? m_database.playedAlbums() : QSet<QString>();
@@ -166,7 +174,12 @@ QVariantList StatsController::neverPlayed(const QVariantList &albums, int limit)
 
 QString StatsController::exportTo(const QUrl &fileUrl, const QString &libraryFolder)
 {
-    const QByteArray json = m_database.exportJson(libraryFolder);
+    QByteArray json = m_database.exportJson(libraryFolder);
+    if (!json.isEmpty() && m_saveLibrary && !libraryFolder.isEmpty()) {
+        QJsonObject root = QJsonDocument::fromJson(json).object();
+        root.insert(u"library"_s, m_saveLibrary(libraryFolder));
+        json = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    }
     QSaveFile file(fileUrl.toLocalFile());
     if (json.isEmpty() || !file.open(QIODevice::WriteOnly) || file.write(json) != json.size() || !file.commit())
         return tr("Could not export to %1").arg(QDir::toNativeSeparators(fileUrl.toLocalFile()));
@@ -178,9 +191,14 @@ QString StatsController::importFrom(const QUrl &fileUrl, const QString &libraryF
     QFile file(fileUrl.toLocalFile());
     if (!file.open(QIODevice::ReadOnly))
         return tr("Could not open %1").arg(QDir::toNativeSeparators(fileUrl.toLocalFile()));
-    const int added = m_database.importJson(file.readAll(), libraryFolder);
+    const QByteArray json = file.readAll();
+    const int added = m_database.importJson(json, libraryFolder);
     if (added < 0)
         return tr("%1 is not a grim. statistics export").arg(QFileInfo(file).fileName());
+    // Ratings, favorites and playlists the export carries (versions before 0.4.1 have none).
+    const QJsonObject library = QJsonDocument::fromJson(json).object().value("library"_L1).toObject();
+    if (m_loadLibrary && !library.isEmpty())
+        m_loadLibrary(library, libraryFolder);
     refresh();
     return added == 1 ? tr("Imported 1 play") : tr("Imported %1 plays").arg(added);
 }

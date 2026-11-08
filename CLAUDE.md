@@ -166,7 +166,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Download import (`SlskdController::importToLibrary`, `core/DownloadTagger`): the title loses edition notes
   ("(Remastered 2009)", "[Deluxe Edition]", " - 2015 Remaster", "(50th Anniversary)": anniversary editions join the
   original album), and a leading track number leaves the file name (`cleanFileName`: only the tag's number or a
-  zero-padded one, so "99 Problems" stays). `albumKey` also drops release extras ("(Super Deluxe Edition)",
+  zero-padded one, so "99 Problems" stays), as do trailing format/catalog tags (" - [ECLEC 22495] [CD]", "[FLAC]").
+  `albumKey` also drops release extras ("(Super Deluxe Edition)", "[CD]", "LP", "Vinyl",
   "- Bonus Track Version", or such words trailing unbracketed) so those join the original album. If the library already has the album (same album and
   artist after `albumKey`/`artistKey`: case, "The ", punctuation and edition notes ignored), the file gets the folder
   most of those tracks are in, their most common artist / album name / year, and their most common cover, then moves
@@ -194,6 +195,12 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   Missing ffmpeg: downloads wait, `SlskdController::ffmpegNeeded` opens one dialog (Main.qml) per batch; "Keep
   original" imports them unconverted and stops asking for the session. Writes `<name>.converting.<ext>` (skipped by scans),
   copies tags with TagLib, then renames. Original goes to the Recycle Bin.
+- FLAC quality: search results drop FLACs whose size/length is under 500 kbps (`Slskd::parseSearchResponses`).
+  A finished FLAC is checked first (`SlskdController::checkFlac`, ffmpeg band levels 16.5–19 kHz vs 13–15.5 kHz,
+  > 25 dB quieter = MP3 in FLAC; misses 256–320 kbps fakes): it goes to the Recycle Bin and, if started from the
+  Soulseek page, another user's copy downloads (`findReplacement`, shared with the queue switch, max 3 switches).
+- Queue switch: a Soulseek-page download queued at its uploader for 2 min moves to another user with a free slot
+  (`checkWatched`/`switchSource`).
 - Last.fm (`core/LastFmClient`): signature = md5 of sorted params (no `format`) + secret. Queue sent in batches of
   50, removed only once accepted; errors -1, 4, 10, 11, 13, 16, 26, 29 keep it, 9 disconnects but keeps it, others
   drop the batch. Scrobble after 15 s of actual listening.
@@ -240,8 +247,8 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Menus: `CompactMenu`/`CompactMenuItem`/`CompactComboBox` with `PopupBackground`. One `TrackContextMenu` in `Main`,
   opened via `ApplicationWindow.window.openTrackMenu([urls])`.
 - Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings, 5 Home (start page, first rail button).
-  Pages 1–4 are `LazyPage` loaders. Home (`HomePage.qml`): greeting, "grim <version>" (`Qt.application.version`), count chips; album tiles show the "New" badge until opened; right-click opens the shared track menu, then rows (a divider line above each) Recently added (`AlbumsModel::recentlyAdded`, file
-  creation time of each album's first track), Recently played / Most played (`StatsController::homeAlbums`), Favorites
+  Pages 1–4 are `LazyPage` loaders. Home (`HomePage.qml`): greeting, "grim <version>" (`Qt.application.version`), count chips; album tiles show the "New" badge until opened; right-click opens the shared track menu, then rows (a divider line above each) Recently added (`AlbumsModel::recentlyAdded`, newest
+  `Track::addedMs` first: when a scan or import first saw the file, kept in the library index; also the "Recently added" sort), Recently played / Most played (`StatsController::homeAlbums`), Favorites
   (`LibraryController::favoriteTracks`), Top rated (`AlbumsModel::topRated`), Never played (`StatsController::neverPlayed`: albums with no listening at
   all); a tile opens it in the Library, right-click opens the track menu (song, or the album's tracks).
 - Statistics: range buttons set `StatsController::rangeDays` (7, 30, 90, 0 = all time; local-midnight start) for totals,
@@ -254,6 +261,11 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   click lists every tier and its goal. Tier colors by rarity: `Theme.medalColors` (bronze .. diamond). New tiers toast once (`milestones/<set>` setting = tiers announced).
 - "New" badge: every Soulseek import (`trackImported`) goes into `LibraryController`'s unseen set (`library/unseen`);
   the album grid badges albums holding one, and opening the album (`showAlbum`) marks them seen.
+- "Updated" badge: known files whose size or mtime changed in a scan (`ScanResult::updated`) go into
+  `LibraryController`'s updated set (`library/updated`, never for unseen files); album tiles, Home tiles and track rows
+  show it. Opening/playing marks them seen; the Library's Albums/Tracks buttons clear all (`clearUpdated`).
+- Album page: clicking the cover opens it full size (`coverViewer` popup). Track menu "Use album cover" (shown only
+  when a selected song's cover differs) writes the album's most common cover (`DownloadTagger::majorityCover`).
 - Panel grid (`Main.qml`): empty `layout/grid` = classic pixel layout; rects are [col, row, w, h, pxHeight, pxWidth]
   (-1 = scales), see `placeAxis()`/`flexAxis()`.
 - Frameless window: `TitleBar.qml` (drag, buttons, slskd dot; `SlskdController::currentDownload` centered while Soulseek downloads, unless the update pill shows), `ResizeEdge.qml`; DWM rounded corners on Windows 11.

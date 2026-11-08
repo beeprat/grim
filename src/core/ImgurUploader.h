@@ -34,6 +34,8 @@ signals:
     void errorOccurred(const QString &message);
 
 private:
+    // Posts body; with retry, a dropped connection or 5xx is tried once more.
+    void send(const QString &key, const QByteArray &body, bool retry);
     void save() const;
 
     QNetworkAccessManager *m_network;

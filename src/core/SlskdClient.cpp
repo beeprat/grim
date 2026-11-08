@@ -59,6 +59,10 @@ QList<SlskdSearchFile> parseSearchResponses(const QByteArray &json)
             file.hasFreeSlot = response.value("hasFreeUploadSlot"_L1).toBool();
             file.queueLength = response.value("queueLength"_L1).toInt();
             file.uploadSpeed = response.value("uploadSpeed"_L1).toInteger();
+            // Real CD FLAC is ~700-1100 kbps; far less means a low-quality or broken file.
+            if (file.extension == "flac"_L1 && file.lengthSec > 0 && file.size > 0
+                && file.size * 8 / file.lengthSec < 500'000)
+                continue;
             files.append(file);
         }
     }

@@ -3,7 +3,7 @@
 ; Output: dist\grim-setup.exe
 
 #define AppName "grim."
-#define AppVersion "0.4.0"
+#define AppVersion "0.4.1"
 #define AppPublisher "šarić"
 #define AppExe "GRIM.exe"
 

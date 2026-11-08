@@ -10,6 +10,7 @@
 #include <QMap>
 
 #include <algorithm>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 
@@ -46,7 +47,7 @@ void AlbumsModel::rebuild()
         const auto found = byKey.constFind(key);
         if (found == byKey.cend()) {
             byKey.insert(key, albums.size());
-            albums.append({title, track.artist, {row}, track.year, track.genre});
+            albums.append({title, track.artist, {row}, track.year, track.genre, 0, std::max(track.addedMs, track.changedMs)});
         } else {
             Album &album = albums[*found];
             album.trackRows.append(row);
@@ -54,6 +55,7 @@ void AlbumsModel::rebuild()
                 album.year = track.year;
             if (album.genre.isEmpty())
                 album.genre = track.genre;
+            album.addedMs = std::max({album.addedMs, track.addedMs, track.changedMs}); // new songs or retags bring it back up
         }
     }
 
@@ -148,6 +150,10 @@ void AlbumsModel::applyFilter()
         case ByRating:
             if (a.rating != b.rating)
                 return a.rating > b.rating; // unrated (0) ends up last
+            break;
+        case ByAdded:
+            if (a.addedMs != b.addedMs)
+                return a.addedMs > b.addedMs;
             break;
         case ByGenre:
             if (a.genre.isEmpty() != b.genre.isEmpty())
@@ -359,20 +365,11 @@ QVariantList AlbumsModel::toList(const QList<const Album *> &albums) const
 
 QVariantList AlbumsModel::recentlyAdded(int limit) const
 {
-    // shortcut: stats one file per album on every call, fine for a few thousand albums; keep an added
-    // time in Track (LibraryIndex) if Home gets slow.
-    const QList<Track> &tracks = m_tracks.tracks();
-    QList<QPair<QDateTime, const Album *>> dated;
-    for (const Album &album : m_all) {
-        const QFileInfo info(tracks.at(album.trackRows.first()).path);
-        const QDateTime born = info.birthTime();
-        dated.append({born.isValid() ? born : info.lastModified(), &album});
-    }
-    std::stable_sort(dated.begin(), dated.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
     QList<const Album *> found;
-    for (int i = 0; i < std::min<qsizetype>(limit, dated.size()); ++i)
-        found.append(dated.at(i).second);
-    return toList(found);
+    for (const Album &album : m_all)
+        found.append(&album);
+    std::stable_sort(found.begin(), found.end(), [](const Album *a, const Album *b) { return a->addedMs > b->addedMs; });
+    return toList(found.mid(0, limit));
 }
 
 QVariantList AlbumsModel::topRated(int limit) const

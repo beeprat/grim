@@ -287,6 +287,8 @@ Item {
         property string number
         // Briefly lit up when the row is the target of a jump (Statistics → Top tracks).
         property bool flashing: false
+        // Track rows: "Updated" badge after the title (tags changed, not played since).
+        property bool updated: false
         readonly property bool playingNow: page.sameFile(trackUrl, PlayerController.url)
 
         signal contextMenu()
@@ -354,13 +356,39 @@ Item {
                 Layout.preferredWidth: 3
                 spacing: 0
 
-                Label {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: row.primary
-                    elide: Text.ElideRight
-                    // The track that is playing now shows in green.
-                    color: row.playingNow ? Material.color(Material.Green, Material.Shade400) : Material.foreground
-                    font.weight: row.playingNow ? Font.DemiBold : Font.Normal
+                    spacing: 6
+
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
+                        text: row.primary
+                        elide: Text.ElideRight
+                        // The track that is playing now shows in green.
+                        color: row.playingNow ? Material.color(Material.Green, Material.Shade400) : Material.foreground
+                        font.weight: row.playingNow ? Font.DemiBold : Font.Normal
+                    }
+
+                    Rectangle {
+                        visible: row.updated
+                        implicitWidth: updatedLabel.implicitWidth + 10
+                        implicitHeight: updatedLabel.implicitHeight + 2
+                        radius: height / 2
+                        color: Theme.accent
+
+                        Label {
+                            id: updatedLabel
+
+                            anchors.centerIn: parent
+                            text: qsTr("Updated")
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: Theme.window
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
                 }
 
                 Label {
@@ -455,6 +483,7 @@ Item {
         // The artist at the start of `secondary`: clicking it opens the artist's page.
         property string artistName
         property bool isNew: false // shows a "New" badge on the cover
+        property bool isUpdated: false // "Updated" badge (tags changed) when not new
 
         signal contextMenu()
 
@@ -483,7 +512,7 @@ Item {
                     anchors.top: parent.top
                     anchors.right: parent.right
                     anchors.margins: 6
-                    visible: tile.isNew
+                    visible: tile.isNew || tile.isUpdated
                     width: newLabel.implicitWidth + 12
                     height: newLabel.implicitHeight + 4
                     radius: height / 2
@@ -493,7 +522,7 @@ Item {
                         id: newLabel
 
                         anchors.centerIn: parent
-                        text: qsTr("New")
+                        text: tile.isNew ? qsTr("New") : qsTr("Updated")
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
                         color: Theme.window
@@ -656,8 +685,8 @@ Item {
                     CompactComboBox {
                         Layout.fillWidth: true // shrinks with the search box in narrow panels
                         Layout.minimumWidth: 90
-                        Layout.maximumWidth: 130
-                        Layout.preferredWidth: 130
+                        Layout.maximumWidth: 160
+                        Layout.preferredWidth: 160
                         Layout.preferredHeight: 40
                         textRole: "label"
                         valueRole: "value"
@@ -666,7 +695,8 @@ Item {
                             { label: qsTr("Title A–Z"), value: AlbumsModel.ByTitle },
                             { label: qsTr("Year"), value: AlbumsModel.ByYear },
                             { label: qsTr("Rating"), value: AlbumsModel.ByRating },
-                            { label: qsTr("Genre"), value: AlbumsModel.ByGenre }
+                            { label: qsTr("Genre"), value: AlbumsModel.ByGenre },
+                            { label: qsTr("Recently added"), value: AlbumsModel.ByAdded }
                         ]
                         // Albums and tracks each keep their own order.
                         currentIndex: Math.max(0, indexOfValue(viewSettings.albums ? viewSettings.albumSort : viewSettings.trackSort))
@@ -722,13 +752,19 @@ Item {
                     Segment {
                         text: qsTr("Albums")
                         selected: viewSettings.albums
-                        onClicked: viewSettings.albums = true
+                        onClicked: {
+                            LibraryController.clearUpdated()
+                            viewSettings.albums = true
+                        }
                     }
 
                     Segment {
                         text: qsTr("Tracks")
                         selected: !viewSettings.albums
-                        onClicked: viewSettings.albums = false
+                        onClicked: {
+                            LibraryController.clearUpdated()
+                            viewSettings.albums = false
+                        }
                     }
                 }
             }
@@ -915,6 +951,7 @@ Item {
                     secondary: page.albumSubtitle(artist, year, genre, rating)
                     artistName: artist
                     isNew: LibraryController.unseenCount > 0 && LibraryController.anyUnseen(LibraryController.albums.urlsOf(index))
+                    isUpdated: LibraryController.updatedCount > 0 && LibraryController.anyUpdated(LibraryController.albums.urlsOf(index))
                     onClicked: page.showAlbum(index)
                     onContextMenu: ApplicationWindow.window.openTrackMenu(LibraryController.albums.urlsOf(index), true)
                 }
@@ -1032,7 +1069,11 @@ Item {
                     onTertiaryClicked: page.openAlbumOf(url, true)
                     trailing: durationMs > 0 ? page.formatTime(durationMs) : ""
                     trackUrl: url
-                    onClicked: PlayerController.playTrack(LibraryController.tracks.urls(), index)
+                    updated: LibraryController.updatedCount > 0 && LibraryController.anyUpdated([url])
+                    onClicked: {
+                        LibraryController.markSeen([url])
+                        PlayerController.playTrack(LibraryController.tracks.urls(), index)
+                    }
                     onContextMenu: ApplicationWindow.window.openTrackMenu([url])
                 }
             }
@@ -1087,6 +1128,12 @@ Item {
                         Layout.preferredWidth: 160
                         Layout.preferredHeight: 160
                         source: page.openAlbumCover
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: coverViewer.open()
+                        }
                     }
 
                     ColumnLayout {
@@ -1219,21 +1266,28 @@ Item {
                         id: moreByList
 
                         Layout.fillWidth: true
-                        // Cover, two text lines, tile padding and room for the scroll bar.
-                        Layout.preferredHeight: 150 + 90
+                        Layout.preferredHeight: contentItem.childrenRect.height // the tiles' own height
                         orientation: ListView.Horizontal
                         spacing: 4
                         clip: true
                         model: page.openAlbumMoreBy
-                        ScrollBar.horizontal: SlimScrollBar {}
 
-                        // A mouse wheel scrolls the row sideways while it overflows.
+                        // A mouse wheel scrolls the row sideways while it overflows, eased.
+                        NumberAnimation {
+                            id: moreByScroll
+                            target: moreByList
+                            property: "contentX"
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
                         WheelHandler {
                             enabled: moreByList.contentWidth > moreByList.width
                             onWheel: (event) => {
                                 const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                moreByList.contentX = Math.max(0, Math.min(moreByList.contentWidth - moreByList.width,
-                                                                           moreByList.contentX - delta))
+                                const from = moreByScroll.running ? moreByScroll.to : moreByList.contentX
+                                moreByScroll.stop()
+                                moreByScroll.to = Math.max(0, Math.min(moreByList.contentWidth - moreByList.width, from - delta))
+                                moreByScroll.start()
                             }
                         }
 
@@ -1248,6 +1302,14 @@ Item {
                             onContextMenu: {}
                         }
                     }
+                    EdgeFade {
+                        flickable: moreByList
+                        horizontal: true
+                        topHeight: 40
+                        bottomHeight: 40
+                        Layout.preferredWidth: 0 // only a mask
+                        Layout.preferredHeight: 0
+                    }
                 }
             }
         }
@@ -1257,6 +1319,34 @@ Item {
         EdgeFade {
             flickable: page.openAlbum >= 0 ? albumFlick : page.genreList ? genreList : viewSettings.albums ? albumGrid : trackList
             bottomHeight: 140
+        }
+    }
+
+    // Album page cover at full size; click or Esc closes it.
+    Popup {
+        id: coverViewer
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: parent.width
+        height: parent.height
+        modal: true
+        padding: 0
+        background: Rectangle { color: "#d0000000" }
+
+        Image {
+            anchors.fill: parent
+            anchors.margins: 32
+            source: coverViewer.opened ? page.openAlbumCover : ""
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            smooth: true
+            mipmap: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: coverViewer.close()
         }
     }
 }

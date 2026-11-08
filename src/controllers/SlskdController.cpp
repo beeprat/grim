@@ -1,6 +1,7 @@
 #include "controllers/SlskdController.h"
 
 #include "controllers/SettingsController.h"
+#include "core/AudioConverter.h"
 #include "core/CredentialStore.h"
 #include "core/DownloadTagger.h"
 #include "core/LibraryFiles.h"
@@ -18,6 +19,9 @@
 #include <QRandomGenerator>
 #include <QSettings>
 #include <QPointer>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QDateTime>
 #include <QTimer>
 
 using namespace Qt::StringLiterals;
@@ -41,6 +45,27 @@ constexpr int kBatchSearchPollMs = 1500;
 constexpr int kBatchSearchMs = 20000;
 constexpr int kBatchSearchEnoughMs = 8000;
 constexpr int kBatchSearchEnough = 60;
+// A page download waiting in its uploader's queue this long moves to another user; at most this often.
+constexpr qint64 kRemoteQueueSwitchMs = 2 * 60 * 1000;
+constexpr int kMaxSourceSwitches = 3;
+
+QString watchKey(const QString &username, const QString &filename)
+{
+    return username + u'\n' + filename;
+}
+
+// "03 - Song Name (feat. X).flac" -> "songnamefeatx": compares one song's file names across users.
+QString songKey(const QString &remotePath)
+{
+    QString name = remotePath.section(u'\\', -1);
+    name = name.left(name.lastIndexOf(u'.'));
+    name.remove(QRegularExpression(u"^\\s*\\d{1,3}\\s*[-._)]?\\s*"_s));
+    QString key;
+    for (const QChar c : name)
+        if (c.isLetterOrNumber())
+            key += c.toLower();
+    return key;
+}
 const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
 const auto kStoppedKey = "slskd/stopped"_L1;
@@ -473,6 +498,7 @@ void SlskdController::download(int resultRow)
     if (!file)
         return;
     setErrorText({});
+    watch({*file});
     m_client->enqueueDownloads({*file}, [this] { refreshDownloads(); });
 }
 
@@ -482,6 +508,7 @@ void SlskdController::downloadAlbum(int albumIndex)
     if (!album)
         return;
     setErrorText({});
+    watch(album->files);
     m_client->enqueueDownloads(album->files, [this] { refreshDownloads(); });
 }
 
@@ -491,6 +518,7 @@ void SlskdController::downloadAlbumFile(int albumIndex, int fileIndex)
     if (!album || fileIndex < 0 || fileIndex >= album->files.size())
         return;
     setErrorText({});
+    watch({album->files.at(fileIndex)});
     m_client->enqueueDownloads({album->files.at(fileIndex)}, [this] { refreshDownloads(); });
 }
 
@@ -502,6 +530,7 @@ void SlskdController::refreshDownloads()
         // Listeners learn the download ids first: "Keep original" imports inside convertFinished.
         emit transfersUpdated(downloads);
         convertFinished(downloads);
+        checkWatched(downloads);
         QString current;
         int others = 0;
         for (const SlskdDownload &download : std::as_const(downloads)) {
@@ -557,6 +586,12 @@ void SlskdController::convertFinished(const QList<SlskdDownload> &downloads)
             // Also the case for downloads already moved into the library in an earlier session.
             m_downloads->setNote(download->id, tr("Not in slskd's downloads folder"));
             emit downloadImportFailed(download->id, tr("Not in slskd's downloads folder"));
+            continue;
+        }
+        if (found->suffix().compare("flac"_L1, Qt::CaseInsensitive) == 0) {
+            const auto watched = m_watched.constFind(watchKey(download->username, download->filename));
+            checkFlac(found->absoluteFilePath(), download->id,
+                      watched != m_watched.cend() ? std::optional<Watched>(*watched) : std::nullopt);
             continue;
         }
         m_converter->process(found->absoluteFilePath(), download->id);
@@ -652,6 +687,138 @@ void SlskdController::cancelDownload(int row)
     if (download.id.isEmpty())
         return;
     m_client->cancelDownload(download, [this] { refreshDownloads(); });
+}
+
+void SlskdController::watch(const QList<SlskdSearchFile> &files, int switches)
+{
+    for (const SlskdSearchFile &file : files)
+        m_watched.insert(watchKey(file.username, file.filename), {file, 0, switches, false});
+}
+
+void SlskdController::checkWatched(const QList<SlskdDownload> &downloads)
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (const SlskdDownload &download : downloads) {
+        const auto it = m_watched.find(watchKey(download.username, download.filename));
+        if (it == m_watched.end())
+            continue;
+        if (Slskd::isTransferFinished(download.state) || download.state.contains("Succeeded"_L1)) {
+            m_watched.erase(it);
+        } else if (!download.state.contains("Queued"_L1)) {
+            it->queuedSince = 0; // started (or initializing): only time spent waiting counts
+        } else if (it->queuedSince == 0) {
+            it->queuedSince = now;
+        } else if (now - it->queuedSince >= kRemoteQueueSwitchMs && !it->searching
+                   && it->switches < kMaxSourceSwitches) {
+            switchSource(download);
+        }
+    }
+}
+
+void SlskdController::switchSource(const SlskdDownload &download)
+{
+    const QString key = watchKey(download.username, download.filename);
+    Watched &watched = m_watched[key];
+    watched.searching = true;
+    const SlskdSearchFile original = watched.file;
+    const int switches = watched.switches;
+    QString name = original.filename.section(u'\\', -1);
+    name = name.left(name.lastIndexOf(u'.'));
+    name.remove(QRegularExpression(u"^\\s*\\d{1,3}\\s*[-._)]?\\s*"_s));
+    name.replace(QRegularExpression(u"[^\\w\\s]"_s), u" "_s);
+    findReplacement(original, [this, key, download, switches](std::optional<SlskdSearchFile> next) {
+        const auto it = m_watched.find(key);
+        if (it == m_watched.end())
+            return; // finished or cancelled meanwhile
+        it->searching = false;
+        if (!next) {
+            it->queuedSince = QDateTime::currentMSecsSinceEpoch(); // nobody better yet: look again later
+            ++it->switches;
+            return;
+        }
+        m_watched.erase(it);
+        watch({*next}, switches + 1);
+        cancelTransfer(download);
+        m_client->enqueueDownloads({*next}, [this] { refreshDownloads(); });
+    });
+}
+
+void SlskdController::findReplacement(const SlskdSearchFile &original,
+                                      std::function<void(std::optional<SlskdSearchFile>)> onDone)
+{
+    QString name = original.filename.section(u'\\', -1);
+    name = name.left(name.lastIndexOf(u'.'));
+    name.remove(QRegularExpression(u"^\\s*\\d{1,3}\\s*[-._)]?\\s*"_s));
+    name.replace(QRegularExpression(u"[^\\w\\s]"_s), u" "_s);
+    const QString target = songKey(original.filename);
+    searchFiles(name.simplified(), [original, target, onDone](QList<SlskdSearchFile> files) {
+        const SlskdSearchFile *best = nullptr;
+        for (const SlskdSearchFile &file : files) {
+            if (!file.hasFreeSlot || file.username == original.username || file.extension != original.extension
+                || songKey(file.filename) != target)
+                continue;
+            if (original.lengthSec > 0 && file.lengthSec > 0 && std::abs(original.lengthSec - file.lengthSec) > 3)
+                continue;
+            if (!best || file.queueLength < best->queueLength
+                || (file.queueLength == best->queueLength && file.uploadSpeed > best->uploadSpeed))
+                best = &file;
+        }
+        onDone(best ? std::optional<SlskdSearchFile>(*best) : std::nullopt);
+    });
+}
+
+void SlskdController::checkFlac(const QString &path, const QString &downloadId, std::optional<Watched> watched)
+{
+    const QString ffmpeg = AudioConverter::ffmpegPath();
+    if (ffmpeg.isEmpty()) {
+        m_converter->process(path, downloadId); // the converter asks for ffmpeg itself
+        return;
+    }
+    m_downloads->setNote(downloadId, tr("Checking quality…"));
+    // Two passes over the first 90 s, one per band; volumedetect prints each band's mean level.
+    const auto band = [](int low, int high) {
+        return u"firequalizer=gain='if(between(f,%1,%2),0,-120)':delay=0.05,volumedetect"_s.arg(low).arg(high);
+    };
+    auto *process = new QProcess(this);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    process->start(ffmpeg, {u"-hide_banner"_s, u"-nostats"_s, u"-t"_s, u"90"_s, u"-i"_s, path,
+                            u"-filter_complex"_s,
+                            u"[0:a]asplit[a][b];[a]%1[x];[b]%2[y]"_s.arg(band(13000, 15500), band(16500, 19000)),
+                            u"-map"_s, u"[x]"_s, u"-f"_s, u"null"_s, u"-"_s, u"-map"_s, u"[y]"_s, u"-f"_s, u"null"_s, u"-"_s});
+    connect(process, &QProcess::finished, this, [this, process, path, downloadId, watched] {
+        process->deleteLater();
+        QList<double> levels;
+        static const QRegularExpression kMean(u"mean_volume: (-?[\\d.]+|-inf) dB"_s);
+        for (auto it = kMean.globalMatch(QString::fromUtf8(process->readAll())); it.hasNext();) {
+            const QString value = it.next().captured(1);
+            levels.append(value == "-inf"_L1 ? -200.0 : value.toDouble());
+        }
+        // Real FLAC measured ~8 dB quieter in the top band, a 128 kbps MP3 in FLAC ~38 dB.
+        // shortcut: 256-320 kbps MP3s keep up to ~19-20 kHz and pass; a sharper test needs a spectrum.
+        const bool fake = levels.size() == 2 && levels.at(0) > -90 && levels.at(0) - levels.at(1) > 25;
+        if (!fake) {
+            m_converter->process(path, downloadId);
+            return;
+        }
+        QFile::moveToTrash(path);
+        if (!watched || watched->switches >= kMaxSourceSwitches) {
+            m_downloads->setNote(downloadId, tr("Deleted: an MP3 turned into FLAC"));
+            emit downloadImportFailed(downloadId, tr("Deleted: an MP3 turned into FLAC"));
+            return;
+        }
+        m_downloads->setNote(downloadId, tr("An MP3 turned into FLAC: looking for another copy…"));
+        const int switches = watched->switches;
+        findReplacement(watched->file, [this, downloadId, switches](std::optional<SlskdSearchFile> next) {
+            if (!next) {
+                m_downloads->setNote(downloadId, tr("Deleted: an MP3 turned into FLAC, no other copy found"));
+                emit downloadImportFailed(downloadId, tr("Deleted: an MP3 turned into FLAC, no other copy found"));
+                return;
+            }
+            m_downloads->setNote(downloadId, tr("An MP3 turned into FLAC: downloading from %1").arg(next->username));
+            watch({*next}, switches + 1);
+            m_client->enqueueDownloads({*next}, [this] { refreshDownloads(); });
+        });
+    });
 }
 
 void SlskdController::cancelTransfer(const SlskdDownload &download)

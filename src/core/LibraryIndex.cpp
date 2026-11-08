@@ -4,6 +4,7 @@
 
 #include <QDataStream>
 #include <QDateTime>
+#include <algorithm>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -17,13 +18,13 @@ namespace {
 
 constexpr quint32 kMagic = 0x47524958; // "GRIX"
 // Bump when Entry or Track gains or changes a field: older index files are then ignored.
-constexpr quint32 kVersion = 1;
+constexpr quint32 kVersion = 3;
 
 QDataStream &operator<<(QDataStream &out, const Entry &entry)
 {
     const Track &t = entry.track;
     return out << t.path << t.title << t.artist << t.album << t.durationMs << qint32(t.year) << t.genre
-               << qint32(t.trackNumber) << qint32(t.discNumber) << entry.size << entry.modifiedMs;
+               << qint32(t.trackNumber) << qint32(t.discNumber) << entry.size << entry.modifiedMs << t.addedMs << t.changedMs;
 }
 
 QDataStream &operator>>(QDataStream &in, Entry &entry)
@@ -33,7 +34,7 @@ QDataStream &operator>>(QDataStream &in, Entry &entry)
     qint32 trackNumber = 0;
     qint32 discNumber = 0;
     in >> t.path >> t.title >> t.artist >> t.album >> t.durationMs >> year >> t.genre >> trackNumber
-        >> discNumber >> entry.size >> entry.modifiedMs;
+        >> discNumber >> entry.size >> entry.modifiedMs >> t.addedMs >> t.changedMs;
     t.year = year;
     t.trackNumber = trackNumber;
     t.discNumber = discNumber;
@@ -84,8 +85,11 @@ bool save(const QString &indexFile, const QString &folder, const QList<Entry> &e
     return out.status() == QDataStream::Ok && file.commit();
 }
 
-ScanResult scan(const QString &folder, const Known &known, Track (*read)(const QString &path))
+ScanResult scan(const QString &folder, const Known &known, Track (*read)(const QString &path), bool reuseTags)
 {
+    // A file not in `known` was added since the last scan, unless there was no index: then the best
+    // guess is the file's own dates (Windows sets creation time on copy, keeps it on move).
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
     QStringList patterns;
     for (const QString &extension : LibraryFiles::playableExtensions())
         patterns << QStringLiteral("*.") + extension;
@@ -103,13 +107,27 @@ ScanResult scan(const QString &folder, const Known &known, Track (*read)(const Q
         entry.size = info.size();
         entry.modifiedMs = info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
         const auto cached = known.constFind(path.toLower());
-        if (cached != known.cend() && cached->size == entry.size && cached->modifiedMs == entry.modifiedMs) {
+        const bool same = cached != known.cend() && cached->size == entry.size && cached->modifiedMs == entry.modifiedMs;
+        if (reuseTags && same) {
             entry.track = cached->track;
             ++reused;
         } else {
             entry.track = read(path);
             result.changed = true;
         }
+        if (cached != known.cend() && cached->track.addedMs > 0)
+            entry.track.addedMs = cached->track.addedMs;
+        else if (!known.isEmpty())
+            entry.track.addedMs = now;
+        else
+            entry.track.addedMs = std::max(info.birthTime(QTimeZone::UTC).toMSecsSinceEpoch(), entry.modifiedMs);
+        if (cached == known.cend() && !known.isEmpty())
+            result.added.append(path);
+        else if (cached != known.cend() && !same)
+            result.updated.append(path);
+        entry.track.changedMs = same && cached->track.changedMs > 0 ? cached->track.changedMs
+                                : cached != known.cend()             ? now
+                                                                     : entry.track.addedMs;
         result.entries.append(entry);
     }
     // Every file reused, and nothing left over in `known`: the library is as indexed.

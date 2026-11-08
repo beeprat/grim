@@ -3,6 +3,7 @@
 #include "core/StatsDatabase.h"
 #include "providers/StatsListModel.h"
 
+#include <QJsonObject>
 #include <QObject>
 #include <QUrl>
 #include <QVariantList>
@@ -62,6 +63,9 @@ public:
     QVariantList dailyListening() const;
     // How a played file's genre is found (the library knows it, the stats database does not).
     void setGenreLookup(std::function<QString(const QString &path)> lookup);
+    // What the export adds besides plays (ratings, favorites, playlists), and how an import adds it back.
+    void setLibraryData(std::function<QJsonObject(const QString &libraryFolder)> save,
+                        std::function<void(const QJsonObject &, const QString &libraryFolder)> load);
 
     // {playCount, listenedMs} of one artist.
     Q_INVOKABLE QVariantMap artistStats(const QString &artist) const;
@@ -91,6 +95,8 @@ private:
     static inline StatsController *s_instance = nullptr;
 
     StatsDatabase &m_database;
+    std::function<QJsonObject(const QString &)> m_saveLibrary;
+    std::function<void(const QJsonObject &, const QString &)> m_loadLibrary;
     StatsTotals m_totals;
     qint64 m_allTimeListenedMs = 0;
     StatsListModel *m_topTracks;

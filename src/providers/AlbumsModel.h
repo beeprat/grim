@@ -33,6 +33,7 @@ public:
         ByYear,   // oldest first; albums without a year last
         ByRating, // highest average star rating first; unrated last
         ByGenre,  // genre A–Z, then artist; albums without a genre last
+        ByAdded,  // newest in the library first
     };
     Q_ENUM(SortOrder)
 
@@ -98,6 +99,7 @@ private:
         int year = 0;
         QString genre;
         double rating = 0;
+        qint64 addedMs = 0; // newest of its tracks
     };
 
     // Regroups every library track into m_all (library or ratings changed), then applyFilter().

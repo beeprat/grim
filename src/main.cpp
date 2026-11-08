@@ -148,6 +148,13 @@ int main(int argc, char *argv[])
         return track ? track->genre : QString();
     });
     PlaylistController playlists(libraryData, library);
+    statsController.setLibraryData([&](const QString &folder) { return LibrarySidecar::toJson(libraryData, folder); },
+                                   [&](const QJsonObject &doc, const QString &folder) {
+                                       if (LibrarySidecar::merge(libraryData, doc, folder)) {
+                                           emit library.metaChanged();
+                                           emit playlists.playlistsChanged();
+                                       }
+                                   });
     // Keeps .grim-library.json in the music folder up to date, a moment after each change and on quit.
     QTimer sidecarWrite;
     sidecarWrite.setSingleShot(true);

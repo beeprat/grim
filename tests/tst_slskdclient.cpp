@@ -173,6 +173,7 @@ private slots:
              "files":[
                {"filename":"@@a\\Album\\01 Song.flac","size":30000000,"extension":"FLAC","bitDepth":16,"sampleRate":44100,"length":245},
                {"filename":"@@a\\Album\\02 Song.mp3","size":9000000,"extension":"","bitRate":320,"length":200},
+               {"filename":"@@a\\Album\\04 Small.flac","size":5000000,"extension":"flac","length":245},
                {"filename":"@@a\\Album\\03 Hidden.mp3","size":1,"isLocked":true}
              ]},
             {"username":"","files":[{"filename":"x.mp3"}]},

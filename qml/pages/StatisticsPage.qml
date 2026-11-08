@@ -486,6 +486,7 @@ Item {
                                 readonly property int shown: Math.max(0, won - 1) // tier on display
 
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 1 // equal shares, whatever the label widths
                                 Layout.fillHeight: true
                                 padding: 4
                                 background: Rectangle {

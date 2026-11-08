@@ -11,7 +11,8 @@
 
 class QNetworkAccessManager;
 
-// Finds an album's front cover online (Deezer's album search, api.deezer.com; sends only the artist and
+// Finds an album's front cover online (the iTunes Search API at 600x600, then Deezer's album search,
+// api.deezer.com; sends only the artist and
 // album name). Answers are remembered for the session, and lookups for the same album share one request,
 // so a batch of downloads from one album asks once.
 class CoverFetcher : public QObject
@@ -28,6 +29,9 @@ public:
     void fetch(const QString &artist, const QString &album, std::function<void(const QByteArray &)> onCover);
 
 private:
+    void fetchDeezer(const QString &key, const QString &artist, const QString &album);
+    void fetchItunes(const QString &key, const QString &artist, const QString &album);
+    void downloadImage(const QString &key, const QUrl &picture);
     void finish(const QString &key, const QByteArray &cover, bool remember);
 
     QNetworkAccessManager *m_network;

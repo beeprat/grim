@@ -41,6 +41,8 @@ class LibraryController : public QObject
     Q_PROPERTY(int metaRevision READ metaRevision NOTIFY metaChanged FINAL)
     // Downloaded songs not looked at yet (the album grid's "new" badge); bindings read it to update.
     Q_PROPERTY(int unseenCount READ unseenCount NOTIFY unseenChanged FINAL)
+    // Files whose tags changed since the library last saw them ("Updated" badge until opened or played).
+    Q_PROPERTY(int updatedCount READ updatedCount NOTIFY unseenChanged FINAL)
 
 public:
     LibraryController(SettingsController &settings, LibraryDatabase &database, QObject *parent = nullptr);
@@ -73,6 +75,10 @@ public:
 
     int unseenCount() const;
     Q_INVOKABLE bool anyUnseen(const QList<QUrl> &fileUrls) const;
+    int updatedCount() const;
+    Q_INVOKABLE bool anyUpdated(const QList<QUrl> &fileUrls) const;
+    // Clears every "Updated" badge (Library's Albums/Tracks buttons).
+    Q_INVOKABLE void clearUpdated();
     Q_INVOKABLE void markSeen(const QList<QUrl> &fileUrls);
     // A download just added to the library: badged until its album is opened.
     void addUnseen(const QString &path);
@@ -99,6 +105,10 @@ public:
     // Looks the album cover of these songs up online and adds it to the ones that have none. Answers with
     // coverSearchFinished.
     Q_INVOKABLE void findCover(const QList<QUrl> &fileUrls);
+    // Gives `fileUrls` the cover most of `albumUrls` have (track menu "Use album cover").
+    Q_INVOKABLE void useAlbumCover(const QList<QUrl> &fileUrls, const QList<QUrl> &albumUrls);
+    // True if one of `fileUrls` lacks that cover.
+    Q_INVOKABLE bool albumCoverDiffers(const QList<QUrl> &fileUrls, const QList<QUrl> &albumUrls) const;
     Q_INVOKABLE QString writeTags(const QList<QUrl> &fileUrls, const QVariantMap &fields, int cover,
                                   const QUrl &coverUrl);
 
@@ -131,6 +141,7 @@ private:
     LibraryModel *m_pickerTracks;
     int m_metaRevision = 0;
     QSet<QString> m_unseen; // unseenKey() of each path, saved in library/unseen
+    QSet<QString> m_updated; // same, for changed tags, saved in library/updated
     AlbumsModel *m_albums;
     // Reads the folder; `full` ignores the index and reads every file's tags again.
     void startScan(bool full);

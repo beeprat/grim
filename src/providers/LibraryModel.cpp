@@ -104,8 +104,12 @@ void LibraryModel::addTrack(const Track &track)
 {
     const auto existing = std::find_if(m_tracks.begin(), m_tracks.end(),
                                        [&](const Track &t) { return t.path.compare(track.path, Qt::CaseInsensitive) == 0; });
-    if (existing != m_tracks.end())
+    if (existing != m_tracks.end()) {
+        const qint64 added = existing->addedMs; // retagged, not newly added
         *existing = track;
+        if (added > 0)
+            existing->addedMs = added;
+    }
     else
         m_tracks.insert(std::upper_bound(m_tracks.begin(), m_tracks.end(), track, lessThan), track);
     // Imports are rare; a reset keeps the row mapping simple.
@@ -207,6 +211,10 @@ void LibraryModel::applyFilter()
                 return b.genre.isEmpty();
             if (const int c = a.genre.compare(b.genre, Qt::CaseInsensitive); c != 0)
                 return c < 0;
+            break;
+        case AlbumsModel::ByAdded:
+            if (a.addedMs != b.addedMs)
+                return a.addedMs > b.addedMs;
             break;
         case AlbumsModel::ByArtist:
             break;

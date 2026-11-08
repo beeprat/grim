@@ -37,10 +37,8 @@ QString absolute(const QString &relativePath, const QString &prefix)
 
 } // namespace
 
-bool LibrarySidecar::write(const LibraryDatabase &data, const QString &libraryFolder)
+QJsonObject LibrarySidecar::toJson(const LibraryDatabase &data, const QString &libraryFolder)
 {
-    if (libraryFolder.isEmpty() || !QDir(libraryFolder).exists())
-        return false;
     const QString prefix = root(libraryFolder);
 
     QJsonObject songs;
@@ -69,14 +67,17 @@ bool LibrarySidecar::write(const LibraryDatabase &data, const QString &libraryFo
         playlists.append(QJsonObject{{u"name"_s, playlist.name}, {u"tracks"_s, tracks}});
     }
 
-    QSaveFile out(prefix + QLatin1StringView(kFileName));
+    return QJsonObject{{u"version"_s, 1}, {u"songs"_s, songs}, {u"favorites"_s, favorites}, {u"playlists"_s, playlists}};
+}
+
+bool LibrarySidecar::write(const LibraryDatabase &data, const QString &libraryFolder)
+{
+    if (libraryFolder.isEmpty() || !QDir(libraryFolder).exists())
+        return false;
+    QSaveFile out(root(libraryFolder) + QLatin1StringView(kFileName));
     if (!out.open(QIODevice::WriteOnly))
         return false;
-    out.write(QJsonDocument(QJsonObject{{u"version"_s, 1},
-                                        {u"songs"_s, songs},
-                                        {u"favorites"_s, favorites},
-                                        {u"playlists"_s, playlists}})
-                  .toJson());
+    out.write(QJsonDocument(toJson(data, libraryFolder)).toJson());
     return out.commit();
 }
 
@@ -88,7 +89,14 @@ bool LibrarySidecar::read(LibraryDatabase &data, const QString &libraryFolder)
     QFile file(prefix + QLatin1StringView(kFileName));
     if (!file.open(QIODevice::ReadOnly))
         return false;
-    const QJsonObject doc = QJsonDocument::fromJson(file.readAll()).object();
+    return merge(data, QJsonDocument::fromJson(file.readAll()).object(), libraryFolder);
+}
+
+bool LibrarySidecar::merge(LibraryDatabase &data, const QJsonObject &doc, const QString &libraryFolder)
+{
+    if (libraryFolder.isEmpty())
+        return false;
+    const QString prefix = root(libraryFolder);
     bool changed = false;
 
     const QJsonObject songs = doc.value(u"songs"_s).toObject();

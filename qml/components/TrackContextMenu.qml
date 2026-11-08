@@ -84,6 +84,16 @@ CompactMenu {
     }
 
     CompactMenuItem {
+        readonly property var albumUrls: LibraryController.albums.urlsOf(LibraryController.albums.rowForTrack(root.firstUrl))
+
+        text: qsTr("Use album cover")
+        // shortcut: reads the album's covers each time the menu's songs change; cache if menus lag on big albums.
+        visible: root.urls.length > 0 && LibraryController.albumCoverDiffers(root.urls, albumUrls)
+        height: visible ? implicitHeight : 0
+        onTriggered: LibraryController.useAlbumCover(root.urls, albumUrls)
+    }
+
+    CompactMenuItem {
         text: qsTr("Open containing folder")
         onTriggered: LibraryController.showInFolder(root.firstUrl)
     }

@@ -14,6 +14,8 @@ struct Track
     QString genre;
     int trackNumber = 0;   // 0 = unknown
     int discNumber = 0;    // 0 = unknown (single-disc albums often leave it out)
+    qint64 addedMs = 0;    // when grim first saw the file in the library, ms since epoch; 0 = unknown
+    qint64 changedMs = 0;  // when grim last saw it added or its tags/file changed, ms since epoch
 };
 
 // Order of tracks within an album: disc, then track number, then file name. Tracks

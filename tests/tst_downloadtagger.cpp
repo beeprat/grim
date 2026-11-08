@@ -126,6 +126,8 @@ private slots:
         QTest::newRow("title number, other track") << u"99 Problems.mp3"_s << 4 << u"99 Problems.mp3"_s;
         QTest::newRow("only number") << u"01.mp3"_s << 1 << u"01.mp3"_s;
         QTest::newRow("none") << u"Help!.m4a"_s << 1 << u"Help!.m4a"_s;
+        QTest::newRow("catalog and format") << u"01 Bandits - [ECLEC 22495] [CD].m4a"_s << 1 << u"Bandits.m4a"_s;
+        QTest::newRow("live year stays") << u"Help! [Live 1971].m4a"_s << 1 << u"Help! [Live 1971].m4a"_s;
     }
 
     void dropsTrackNumbersFromFileNames()
@@ -158,6 +160,7 @@ private slots:
         QTest::newRow("super deluxe bracket") << u"Abbey Road (Super Deluxe Edition)"_s;
         QTest::newRow("anniversary square") << u"Abbey Road [50th Anniversary Super Deluxe]"_s;
         QTest::newRow("expanded") << u"Abbey Road (Expanded)"_s;
+        QTest::newRow("cd bracket") << u"Abbey Road [CD]"_s;
         QTest::newRow("bonus track version dash") << u"Abbey Road - Bonus Track Version"_s;
         QTest::newRow("trailing words") << u"Abbey Road Super Deluxe Edition"_s;
         QTest::newRow("trailing year + remaster") << u"Abbey Road 2019 Remaster"_s;

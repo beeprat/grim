@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QString>
 
 class LibraryDatabase;
@@ -16,5 +17,9 @@ bool write(const LibraryDatabase &data, const QString &libraryFolder);
 // Adds what the file has and `data` lacks: unrated songs get the file's rating, favorites are joined,
 // missing playlists are created. Nothing in `data` is overwritten. True if anything changed.
 bool read(LibraryDatabase &data, const QString &libraryFolder);
+
+// The file's contents, and adding them as read() does; the statistics export carries them too.
+QJsonObject toJson(const LibraryDatabase &data, const QString &libraryFolder);
+bool merge(LibraryDatabase &data, const QJsonObject &doc, const QString &libraryFolder);
 
 } // namespace LibrarySidecar

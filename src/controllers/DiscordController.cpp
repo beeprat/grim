@@ -194,7 +194,7 @@ void DiscordController::onTrackChanged()
     QByteArray jpeg;
     QBuffer buffer(&jpeg);
     buffer.open(QIODevice::WriteOnly);
-    cover.save(&buffer, "JPG", 90);
+    cover.save(&buffer, "JPG", 85); // smaller upload; Discord shows it small
 
     // The same encoder on the same pixels gives the same bytes, so one album's tracks share a key.
     m_coverKey = ImgurUploader::keyOf(jpeg);

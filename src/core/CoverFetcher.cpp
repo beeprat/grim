@@ -53,12 +53,18 @@ void CoverFetcher::fetch(const QString &artist, const QString &album, std::funct
     waiting.append(std::move(onCover));
     if (waiting.size() > 1)
         return; // already asked
+    fetchItunes(key, artist, album);
+}
 
+void CoverFetcher::fetchDeezer(const QString &key, const QString &artist, const QString &album)
+{
+    // Fallback when iTunes has no match.
+    const QString albumKey = DownloadTagger::albumKey(album);
     QUrl url = m_baseUrl.resolved(QUrl(u"/search/album"_s));
     url.setQuery(QUrlQuery{{u"q"_s, artist.trimmed() + u' ' + album.trimmed()},
                            {u"limit"_s, u"25"_s}});
     QNetworkReply *reply = m_network->get(requestFor(url));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, key, artist, albumKey] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, key, artist, album, albumKey] {
         reply->deleteLater();
         if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
             finish(key, {}, false); // offline: asked again next time
@@ -89,14 +95,57 @@ void CoverFetcher::fetch(const QString &artist, const QString &album, std::funct
             finish(key, {}, true);
             return;
         }
-        QNetworkReply *image = m_network->get(requestFor(QUrl(picture)));
-        connect(image, &QNetworkReply::finished, this, [this, image, key] {
-            image->deleteLater();
-            const QByteArray bytes = image->readAll();
-            const bool ok = image->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200
-                            && !QImage::fromData(bytes).isNull();
-            finish(key, ok ? bytes : QByteArray(), ok);
-        });
+        downloadImage(key, QUrl(picture));
+    });
+}
+
+void CoverFetcher::fetchItunes(const QString &key, const QString &artist, const QString &album)
+{
+    // First choice: Apple's iTunes Search API; same exact-name rule as Deezer.
+    QUrl url(u"https://itunes.apple.com/search"_s);
+    url.setQuery(QUrlQuery{{u"term"_s, artist.trimmed() + u' ' + album.trimmed()},
+                           {u"entity"_s, u"album"_s},
+                           {u"limit"_s, u"25"_s}});
+    QNetworkReply *reply = m_network->get(requestFor(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, key, artist, album] {
+        reply->deleteLater();
+        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) {
+            fetchDeezer(key, artist, album);
+            return;
+        }
+        const QJsonValue results = QJsonDocument::fromJson(reply->readAll()).object().value("results"_L1);
+        if (!results.isArray()) {
+            fetchDeezer(key, artist, album);
+            return;
+        }
+        QString picture;
+        for (const QJsonValue &value : results.toArray()) {
+            const QJsonObject candidate = value.toObject();
+            if (DownloadTagger::albumKey(candidate.value("collectionName"_L1).toString()) != DownloadTagger::albumKey(album)
+                || DownloadTagger::artistKey(candidate.value("artistName"_L1).toString()) != DownloadTagger::artistKey(artist))
+                continue;
+            picture = candidate.value("artworkUrl100"_L1).toString();
+            if (!picture.isEmpty())
+                break;
+        }
+        if (picture.isEmpty()) {
+            fetchDeezer(key, artist, album);
+            return;
+        }
+        picture.replace(u"100x100bb"_s, u"600x600bb"_s); // Apple scales the artwork to the size in the URL
+        downloadImage(key, QUrl(picture));
+    });
+}
+
+void CoverFetcher::downloadImage(const QString &key, const QUrl &picture)
+{
+    QNetworkReply *image = m_network->get(requestFor(picture));
+    connect(image, &QNetworkReply::finished, this, [this, image, key] {
+        image->deleteLater();
+        const QByteArray bytes = image->readAll();
+        const bool ok = image->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200
+                        && !QImage::fromData(bytes).isNull();
+        finish(key, ok ? bytes : QByteArray(), ok);
     });
 }
 
