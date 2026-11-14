@@ -624,8 +624,10 @@ void SlskdController::importToLibrary(const QString &path, const QString &downlo
     const QString title = DownloadTagger::cleanTitle(tags.title);
     // shortcut: covers are read on the GUI thread (one album's files); move to a worker if imports stutter.
     const QByteArray cover = match.found ? DownloadTagger::majorityCover(match.paths) : QByteArray();
-    const bool retag = title != tags.title || match.found;
-    if (retag && !DownloadTagger::writeTags(path, title, match.artist, match.album, match.year, cover))
+    // Always written: TagReader::read already cleaned title and album, so a changed name can't be detected here,
+    // and the file's own tags must lose "(Deluxe Edition)" too or phone players split the album.
+    const QString album = match.found ? match.album : tags.album;
+    if (!DownloadTagger::writeTags(path, title, match.artist, album, match.year, cover))
         qWarning() << "SlskdController: could not retag" << path;
 
     // No track number in the file name ("01 Help!.m4a"): it is in the tags. Renamed in the download folder,

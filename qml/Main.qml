@@ -1501,7 +1501,12 @@ ApplicationWindow {
                                 page: 0
                                 text: back ? qsTr("Back") : qsTr("Library")
                                 icon.source: back ? "icons/back.svg" : "icons/library.svg"
-                                onClicked: if (back) libraryPage.goBack()
+                                onClicked: {
+                                    if (back)
+                                        libraryPage.goBack()
+                                    else
+                                        LibraryController.genreFilter = "" // back to all genres
+                                }
                             }
                             NavButton { page: 1; text: qsTr("Playlists"); icon.source: "icons/playlist.svg" }
                             NavButton { page: 2; text: qsTr("Statistics"); icon.source: "icons/statistics.svg" }

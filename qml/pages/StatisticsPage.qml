@@ -23,6 +23,16 @@ Item {
     }
 
     // Chart slice i: the accent's hue turned round the color wheel, so slices stay apart with any accent.
+    // A pie slice or legend row: its genre in the Library ("Unknown" too); "Other" lists the genres it holds.
+    function openShare(share) {
+        if (share.key !== "") {
+            ApplicationWindow.window.showGenre(share.key)
+        } else {
+            otherMenu.genres = share.genres ?? []
+            otherMenu.popup()
+        }
+    }
+
     function sliceColor(i) {
         return Qt.hsla((Theme.accent.hslHue + i * 0.13) % 1, Theme.accent.hslSaturation, Theme.accent.hslLightness, 1)
     }
@@ -144,11 +154,13 @@ Item {
         GridLayout {
             id: charts
 
-            // Graph, pie, medals: 3 across, 2 + medals below, or stacked, by width; each row 170 px.
+            // Graph, pie, medals: 3 across, 2 + medals below, or stacked, by width; each row at least 170 px,
+            // taller when the legend or medals need it (large interface size or Windows scale).
             readonly property bool wide: width >= 1000
             readonly property int rowCount: wide ? 1 : width >= 620 ? 2 : 3
+            readonly property real rowHeight: Math.max(170, legend.implicitHeight + 32, medalRow.implicitHeight + 32)
             Layout.fillWidth: true
-            Layout.preferredHeight: rowCount * 170 + (rowCount - 1) * rowSpacing
+            Layout.preferredHeight: rowCount * rowHeight + (rowCount - 1) * rowSpacing
             columns: wide ? 3 : rowCount === 2 ? 2 : 1
             rowSpacing: 12
             columnSpacing: 12
@@ -179,7 +191,10 @@ Item {
                             elide: Text.ElideRight
                         }
                         Label {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
                             text: qsTr("%1 of %2 days active").arg(page.days.filter(d => d.ms > 0).length).arg(page.days.length)
+                            elide: Text.ElideRight
                             opacity: 0.6
                             font.pixelSize: 12
                         }
@@ -365,6 +380,7 @@ Item {
                         onHoveredChanged: requestPaint()
                         Layout.fillHeight: true
                         Layout.preferredWidth: height
+                        Layout.maximumWidth: parent.width * 0.4 // the legend keeps the rest
 
                         onPaint: {
                             const ctx = getContext("2d")
@@ -398,8 +414,8 @@ Item {
                             onExited: pie.hovered = -1
                             onClicked: (mouse) => {
                                 const i = pie.sliceAt(mouse.x, mouse.y)
-                                if (i >= 0 && StatsController.genreShares[i].key !== "")
-                                    ApplicationWindow.window.showGenre(StatsController.genreShares[i].key)
+                                if (i >= 0)
+                                    page.openShare(StatsController.genreShares[i])
                             }
                         }
                         Connections {
@@ -413,7 +429,9 @@ Item {
                     }
 
                     ColumnLayout {
+                        id: legend
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         Layout.alignment: Qt.AlignVCenter
                         spacing: 0
 
@@ -434,14 +452,13 @@ Item {
                                 opacity: legendMouse.containsMouse ? 0.7 : 1
                                 onOpacityChanged: pie.hovered = legendMouse.containsMouse ? index : (pie.hovered === index ? -1 : pie.hovered)
 
-                                // Opens the genre's albums in the Library ("Unknown" and "Other" have none to open).
+                                // Opens the genre's albums in the Library; "Other" lists its genres.
                                 MouseArea {
                                     id: legendMouse
                                     anchors.fill: parent
-                                    enabled: legendRow.modelData.key !== ""
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: ApplicationWindow.window.showGenre(legendRow.modelData.key)
+                                    onClicked: page.openShare(legendRow.modelData)
                                 }
                                 Rectangle { width: 10; height: 10; radius: 5; color: page.sliceColor(index) }
                                 Label { Layout.fillWidth: true; text: modelData.genre; elide: Text.ElideRight; font.pixelSize: 12 }
@@ -472,6 +489,7 @@ Item {
                     spacing: 8
 
                     RowLayout {
+                        id: medalRow
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         spacing: 8
@@ -513,6 +531,7 @@ Item {
                                         horizontalAlignment: Text.AlignHCenter
                                         text: ApplicationWindow.window.medalLabel(medal.modelData, medal.shown)
                                         font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
                                         opacity: medal.won > 0 ? 1 : 0.4
                                     }
                                     Label {
@@ -635,5 +654,26 @@ Item {
     // Rows fade at the top (once scrolled) and bottom, like the library.
     EdgeFade {
         flickable: flick
+    }
+
+    // "Other": the genres too small for their own slice.
+    CompactMenu {
+        id: otherMenu
+
+        property var genres: []
+
+        Instantiator {
+            model: otherMenu.genres
+
+            delegate: CompactMenuItem {
+                required property var modelData
+
+                text: qsTr("%1 (%2 %)").arg(modelData.genre).arg(Math.max(1, Math.round(modelData.ms * 100 / Math.max(1, page.genreTotalMs))))
+                onTriggered: ApplicationWindow.window.showGenre(modelData.key)
+            }
+
+            onObjectAdded: (index, item) => otherMenu.insertItem(index, item)
+            onObjectRemoved: (index, item) => otherMenu.removeItem(item)
+        }
     }
 }

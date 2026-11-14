@@ -244,16 +244,22 @@ void StatsController::refresh()
     std::sort(genres.begin(), genres.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
     m_genreShares.clear();
     qint64 other = 0;
+    QVariantList otherGenres; // what "Other" holds, listed when it is clicked
     for (qsizetype i = 0; i < genres.size(); ++i) {
-        if (i < kGenreSlices)
-            m_genreShares.append(QVariantMap{{u"genre"_s, genres[i].first.isEmpty() ? tr("Unknown") : genres[i].first},
-                                             {u"key"_s, genres[i].first.toLower()}, // the library's genre filter key
-                                             {u"ms"_s, genres[i].second}});
-        else
+        // The library's genre filter key; "\x01" is its "no genre" entry (AlbumsModel's kUnknownGenre).
+        const QVariantMap share{{u"genre"_s, genres[i].first.isEmpty() ? tr("Unknown") : genres[i].first},
+                                {u"key"_s, genres[i].first.isEmpty() ? u"\x01"_s : genres[i].first.toLower()},
+                                {u"ms"_s, genres[i].second}};
+        if (i < kGenreSlices) {
+            m_genreShares.append(share);
+        } else {
             other += genres[i].second;
+            otherGenres.append(share);
+        }
     }
     if (other > 0)
-        m_genreShares.append(QVariantMap{{u"genre"_s, tr("Other")}, {u"key"_s, QString()}, {u"ms"_s, other}});
+        m_genreShares.append(QVariantMap{{u"genre"_s, tr("Other")}, {u"key"_s, QString()}, {u"ms"_s, other},
+                                         {u"genres"_s, otherGenres}});
 
     // Daily bars, zero-filled. All time starts at the first day listened.
     // shortcut: today's UTC offset is used for every day, so days across a DST change shift by an hour; fine for a chart.

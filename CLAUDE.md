@@ -254,7 +254,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Statistics: range buttons set `StatsController::rangeDays` (7, 30, 90, 0 = all time; local-midnight start) for totals,
   lists, highlights and charts. Charts are QML Canvas: per-day bars (`dailyListening`, zero-filled, all time capped at
   365 days; hover names the day) and a genre pie (`genreShares`, top 7 + Other; genre comes from the library through
-  `setGenreLookup` in main.cpp, since the stats DB has none). A genre opened from the pie remembers it (`LibraryPage.statsGenre`);
+  `setGenreLookup` in main.cpp, since the stats DB has none). "Unknown" opens the library's no-genre entry, "Other" a menu of its genres (`genres` in its share). A genre opened from the pie remembers it (`LibraryPage.statsGenre`);
   clearing that genre chip returns to Statistics. Leaving the library for any page drops it. Home and Statistics scroll with `EdgeFade` like the library. Milestones card: one medal per set (`medalSets` in Main.qml:
   listening hours 24/50/100/150/250 via `allTimeListenedMs`, ignores the range; library songs
   100/250/500/1000/2000), showing the highest tier won;

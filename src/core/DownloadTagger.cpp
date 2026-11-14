@@ -240,6 +240,12 @@ bool writeTags(const QString &path, const QString &title, const QString &artist,
         tag->setArtist(text(artist));
     if (!album.isEmpty())
         tag->setAlbum(text(album));
+    if (!artist.isEmpty()) {
+        // Players group albums by album artist: the download's own ("a-ha" vs "a‐ha") would split the album.
+        TagLib::PropertyMap properties = file.properties();
+        properties.replace("ALBUMARTIST", TagLib::StringList(text(artist)));
+        file.setProperties(properties);
+    }
     if (year > 0)
         tag->setYear(unsigned(year));
     if (!cover.isEmpty()) {
