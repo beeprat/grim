@@ -60,6 +60,8 @@ class PlayerController : public QObject
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY shuffleChanged FINAL)
     Q_PROPERTY(Repeat repeat READ repeat WRITE setRepeat NOTIFY repeatChanged FINAL)
     // A-B loop inside the current track (-1 = not set); playback jumps back to the start at the end.
+    // The tracks after the current one, in play order (shuffle included), as file:// URLs.
+    Q_PROPERTY(QList<QUrl> upNext READ upNext NOTIFY queueChanged FINAL)
     Q_PROPERTY(qint64 loopStartMs READ loopStartMs NOTIFY loopChanged FINAL)
     Q_PROPERTY(qint64 loopEndMs READ loopEndMs NOTIFY loopChanged FINAL)
 
@@ -137,6 +139,15 @@ public:
     // These files are about to be deleted: stops playing them (current or queued for gapless),
     // so they are not held open, and takes them out of the queue.
     void releaseFiles(const QStringList &paths);
+    QList<QUrl> upNext() const;
+    // "Play next": inserts these files right after the current track; `atEnd` ("Add to queue") appends them.
+    Q_INVOKABLE void enqueue(const QList<QUrl> &fileUrls, bool atEnd);
+    // Positions are indices into upNext.
+    Q_INVOKABLE void moveUpNext(int from, int to);
+    Q_INVOKABLE void removeUpNext(int position);
+    // Takes every track after the current one out; playback stops after it.
+    Q_INVOKABLE void clearUpNext();
+    Q_INVOKABLE void playUpNext(int position);
     Q_INVOKABLE void togglePlay();
     Q_INVOKABLE void next();
     // Restarts the track if more than 3 s in; otherwise goes to the previous one.
@@ -161,6 +172,7 @@ signals:
     void shuffleChanged();
     void repeatChanged();
     void loopChanged();
+    void queueChanged();
     void lyricIndexChanged();
     void lyricsShownChanged();
     void effectsChanged();

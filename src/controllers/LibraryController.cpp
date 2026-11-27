@@ -3,6 +3,7 @@
 #include "controllers/SettingsController.h"
 #include "core/CoverFetcher.h"
 #include "core/DownloadTagger.h"
+#include "core/LibraryCheck.h"
 #include "core/LibraryDatabase.h"
 #include "core/LibraryFiles.h"
 #include "core/ReplayGain.h"
@@ -260,6 +261,20 @@ bool LibraryController::anyUnseen(const QList<QUrl> &fileUrls) const
                        [this](const QUrl &url) { return m_unseen.contains(unseenKey(url.toLocalFile())); });
 }
 
+int LibraryController::albumBadge(int row) const
+{
+    if (m_unseen.isEmpty() && m_updated.isEmpty())
+        return 0;
+    bool updated = false;
+    for (const QString &path : m_albums->pathsOf(row)) {
+        const QString key = unseenKey(path);
+        if (m_unseen.contains(key))
+            return 1;
+        updated = updated || m_updated.contains(key);
+    }
+    return updated ? 2 : 0;
+}
+
 int LibraryController::updatedCount() const
 {
     return int(m_updated.size());
@@ -307,21 +322,96 @@ void LibraryController::addUnseen(const QString &path)
     emit unseenChanged();
 }
 
+namespace {
+
+QVariantMap tile(const QString &path, const Track &track)
+{
+    return {{QStringLiteral("title"), track.title.isEmpty() ? QFileInfo(path).completeBaseName() : track.title},
+            {QStringLiteral("artist"), track.artist},
+            {QStringLiteral("durationMs"), track.durationMs},
+            {QStringLiteral("coverUrl"), CoverImageProvider::urlFor(path)},
+            {QStringLiteral("url"), QUrl::fromLocalFile(path)}};
+}
+
+} // namespace
+
 QVariantList LibraryController::favoriteTracks(int limit) const
 {
     QVariantList result;
     for (const QString &path : m_database.favorites()) {
         if (result.size() >= limit)
             break;
-        const Track *track = m_tracks->findTrack(path);
-        if (!track)
-            continue;
-        result.append(QVariantMap{{QStringLiteral("title"), track->title.isEmpty() ? QFileInfo(path).completeBaseName() : track->title},
-                                  {QStringLiteral("artist"), track->artist},
-                                  {QStringLiteral("coverUrl"), CoverImageProvider::urlFor(path)},
-                                  {QStringLiteral("url"), QUrl::fromLocalFile(path)}});
+        if (const Track *track = m_tracks->findTrack(path))
+            result.append(tile(path, *track));
     }
     return result;
+}
+
+QVariantList LibraryController::tracksFor(const QList<QUrl> &fileUrls) const
+{
+    QVariantList result;
+    for (const QUrl &url : fileUrls) {
+        const QString path = url.toLocalFile();
+        const Track *track = m_tracks->findTrack(path);
+        result.append(tile(path, track ? *track : Track{}));
+    }
+    return result;
+}
+
+qint64 LibraryController::durationOf(const QList<QUrl> &fileUrls) const
+{
+    qint64 total = 0;
+    for (const QUrl &url : fileUrls)
+        if (const Track *track = m_tracks->findTrack(url.toLocalFile()))
+            total += track->durationMs;
+    return total;
+}
+
+void LibraryController::checkLibrary()
+{
+    struct Report
+    {
+        QList<LibraryCheck::Gap> gaps;
+        QList<QStringList> duplicates;
+    };
+    const QList<Track> tracks = m_tracks->tracks();
+    QtConcurrent::run([tracks] {
+        return Report{LibraryCheck::missingTags(tracks, [](const QString &path) { return !TagReader::readCover(path).isEmpty(); }),
+                      LibraryCheck::duplicates(tracks, [](const QString &path) { return QFileInfo(path).size(); })};
+    }).then(this, [this](const Report &report) {
+        QVariantList missing;
+        for (const LibraryCheck::Gap &gap : report.gaps) {
+            QStringList what;
+            if (gap.cover)
+                what << tr("cover");
+            if (gap.year)
+                what << tr("year");
+            if (gap.genre)
+                what << tr("genre");
+            if (gap.trackNumber)
+                what << tr("track number");
+            QList<QUrl> urls;
+            for (const QString &path : gap.paths)
+                urls.append(QUrl::fromLocalFile(path));
+            missing.append(QVariantMap{{QStringLiteral("album"), gap.album.isEmpty() ? tr("Unknown album") : gap.album},
+                                       {QStringLiteral("artist"), gap.artist},
+                                       {QStringLiteral("coverUrl"), CoverImageProvider::urlFor(gap.paths.first())},
+                                       {QStringLiteral("missing"), what.join(QStringLiteral(", "))},
+                                       {QStringLiteral("urls"), QVariant::fromValue(urls)}});
+        }
+        QVariantList duplicates;
+        for (const QStringList &paths : report.duplicates) {
+            const Track *first = m_tracks->findTrack(paths.first());
+            QVariantList files;
+            for (const QString &path : paths)
+                files.append(QVariantMap{{QStringLiteral("url"), QUrl::fromLocalFile(path)},
+                                         {QStringLiteral("folder"), QDir::toNativeSeparators(QFileInfo(path).path())}});
+            duplicates.append(QVariantMap{{QStringLiteral("title"), first ? first->title : QFileInfo(paths.first()).completeBaseName()},
+                                          {QStringLiteral("artist"), first ? first->artist : QString()},
+                                          {QStringLiteral("files"), files}});
+        }
+        emit libraryChecked(missing, duplicates);
+    });
 }
 
 void LibraryController::toggleFavorite(const QUrl &fileUrl)

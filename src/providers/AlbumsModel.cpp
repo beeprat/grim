@@ -92,7 +92,8 @@ void AlbumsModel::applyFilter()
             if (album.title.contains(m_filter, Qt::CaseInsensitive) || album.artist.contains(m_filter, Qt::CaseInsensitive))
                 return false;
             return std::none_of(album.trackRows.cbegin(), album.trackRows.cend(), [&](int row) {
-                return tracks.at(row).title.contains(m_filter, Qt::CaseInsensitive);
+                return tracks.at(row).title.contains(m_filter, Qt::CaseInsensitive)
+                       || tracks.at(row).composer.contains(m_filter, Qt::CaseInsensitive);
             });
         });
     }
@@ -309,6 +310,8 @@ QVariantList AlbumsModel::tracksOf(int row) const
         result.append(QVariantMap{
             {u"title"_s, track.title},
             {u"artist"_s, track.artist},
+            {u"genre"_s, track.genre},
+            {u"composer"_s, track.composer},
             {u"durationMs"_s, track.durationMs},
             {u"url"_s, QUrl::fromLocalFile(track.path)},
         });
@@ -332,6 +335,16 @@ QList<QUrl> AlbumsModel::urlsOf(int row) const
     for (const int trackRow : m_albums.at(row).trackRows)
         urls.append(QUrl::fromLocalFile(m_tracks.tracks().at(trackRow).path));
     return urls;
+}
+
+QStringList AlbumsModel::pathsOf(int row) const
+{
+    QStringList paths;
+    if (row < 0 || row >= m_albums.size())
+        return paths;
+    for (const int trackRow : m_albums.at(row).trackRows)
+        paths.append(m_tracks.tracks().at(trackRow).path);
+    return paths;
 }
 
 QVariantList AlbumsModel::albumsBy(const QString &artist, const QString &exceptTitle) const

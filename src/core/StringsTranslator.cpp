@@ -34,13 +34,6 @@ bool StringsTranslator::isEmpty() const
     return m_strings.isEmpty();
 }
 
-QString StringsTranslator::escape(const QString &text)
-{
-    QString escaped = text;
-    escaped.replace(u"\\"_s, u"\\\\"_s).replace(u"\""_s, u"\\\""_s).replace(u"\n"_s, u"\\n"_s);
-    return escaped;
-}
-
 QString StringsTranslator::unescape(const QString &text)
 {
     QString result;
@@ -70,19 +63,4 @@ QHash<QString, QString> StringsTranslator::parse(const QString &text)
             strings.insert(unescape(match.captured(1)), translated);
     }
     return strings;
-}
-
-QString StringsTranslator::makeTemplate(const QStringList &sourceStrings, const QHash<QString, QString> &existing)
-{
-    QString text = uR"(// GRIM translation file (UTF-8).
-// Each line: "English text" = "Your translation";
-// Keep the left side exactly as it is. Keep placeholders like %1 and %2 in the translation.
-// Lines you leave as they are stay in English. Save, then pick the language in Settings.
-
-)"_s;
-    for (const QString &source : sourceStrings) {
-        const QString translated = existing.value(source, source);
-        text += u"\"%1\" = \"%2\";\n"_s.arg(escape(source), escape(translated));
-    }
-    return text;
 }

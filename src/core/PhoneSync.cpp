@@ -100,6 +100,11 @@ PhoneSync::Plan PhoneSync::plan(const QString &library, const QString &phone, bo
     for (auto it = remote.cbegin(); it != remote.cend(); ++it)
         if (!local.contains(it.key()) && !kept.contains(it.key()))
             result.remove.append(it->path);
+    // Windows Media Player's small art (Folder.jpg 200 px, AlbumArt*.jpg): MiniMoon prefers it to the songs' own cover.
+    const QDir phoneDir(phone);
+    QDirIterator art(phone, {u"Folder.jpg"_s, u"AlbumArt*.jpg"_s}, QDir::Files, QDirIterator::Subdirectories);
+    while (art.hasNext())
+        result.remove.append(phoneDir.relativeFilePath(art.next()));
     result.remove.sort();
     result.copy = result.added + result.updated;
     return result;

@@ -611,19 +611,26 @@ ApplicationWindow {
     }
 
     // Sidebar entry: icon only; the name is the tooltip and the accessible name.
-    // A page of the StackLayout that is only created once it is first shown.
+    // A page of the StackLayout, built off the UI thread a few seconds after startup (so its first
+    // opening is instant and startup is not slowed), or right away if opened before that.
     component LazyPage: Loader {
         id: lazy
 
         required property int pageIndex
 
         active: false
+        asynchronous: true
         Connections {
             target: root
             function onPageChanged() {
                 if (root.page === lazy.pageIndex)
                     lazy.active = true
             }
+        }
+        Timer {
+            running: !lazy.active
+            interval: 2000 + lazy.pageIndex * 500
+            onTriggered: lazy.active = true
         }
     }
 
@@ -851,6 +858,21 @@ ApplicationWindow {
         trackMenu.popup()
     }
 
+    readonly property bool queueOpen: queuePanel.visible
+    function toggleQueue() {
+        if (queuePanel.visible) {
+            queuePanel.close()
+            return
+        }
+        // Left of the now-playing card, so its buttons (and the queue button) stay clear.
+        const cardX = nowPlayingCard.mapToItem(null, 0, 0).x
+        queuePanel.x = Math.max(12, Math.min(root.width - queuePanel.width - 24, cardX - queuePanel.width - 12))
+        queuePanel.open()
+    }
+    function checkLibrary() {
+        libraryCheckDialog.open()
+    }
+
     function showAlbumOf(fileUrl, highlightTrack) {
         root.page = 0
         libraryPage.openAlbumOf(fileUrl, highlightTrack === true)
@@ -878,6 +900,32 @@ ApplicationWindow {
         sequences: ["Media Play", "Media Pause", "Toggle Media Play/Pause"]
         onActivated: PlayerController.togglePlay()
     }
+    // Arrows: Left/Right seek 5 s, Up/Down change the volume (a focused text field or slider keeps them).
+    Shortcut {
+        sequence: "Left"
+        enabled: PlayerController.hasTrack
+        onActivated: PlayerController.seek(Math.max(0, PlayerController.positionMs - 5000))
+    }
+    Shortcut {
+        sequence: "Right"
+        enabled: PlayerController.hasTrack
+        onActivated: PlayerController.seek(Math.min(PlayerController.durationMs, PlayerController.positionMs + 5000))
+    }
+    Shortcut {
+        sequence: "Up"
+        onActivated: PlayerController.volume = Math.min(1, PlayerController.volume + 0.05)
+    }
+    Shortcut {
+        sequence: "Down"
+        onActivated: PlayerController.volume = Math.max(0, PlayerController.volume - 0.05)
+    }
+    Shortcut {
+        sequences: [StandardKey.Find]
+        onActivated: {
+            root.page = 0
+            libraryPage.focusSearch()
+        }
+    }
     Shortcut {
         sequence: "Media Next"
         onActivated: PlayerController.next()
@@ -885,6 +933,20 @@ ApplicationWindow {
     Shortcut {
         sequence: "Media Previous"
         onActivated: PlayerController.previous()
+    }
+
+    QueuePanel {
+        id: queuePanel
+
+        y: 64
+        width: 380
+        maxHeight: Math.min(640, root.height - 160)
+    }
+
+    LibraryCheckDialog {
+        id: libraryCheckDialog
+
+        onEditRequested: (fileUrls) => tagDialog.ask(fileUrls)
     }
 
     TrackContextMenu {

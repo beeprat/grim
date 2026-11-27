@@ -18,6 +18,8 @@
 #include <QTimer>
 #include <QtLogging>
 
+#include "core/QueueOrder.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -538,6 +540,7 @@ void PlayerController::rebuildOrder()
         m_order.append(i);
     if (m_queue.isEmpty()) {
         m_orderPosition = -1;
+        emit queueChanged();
         return;
     }
 
@@ -549,6 +552,7 @@ void PlayerController::rebuildOrder()
     } else {
         m_orderPosition = current;
     }
+    emit queueChanged();
 }
 
 void PlayerController::playAt(int orderPosition, int crossfadeMs, bool autoplay)
@@ -556,6 +560,7 @@ void PlayerController::playAt(int orderPosition, int crossfadeMs, bool autoplay)
     finishSession();
     setPlaying(false);
     m_orderPosition = orderPosition;
+    emit queueChanged();
 
     const QString path = m_queue.value(m_order.value(orderPosition, -1));
     if (path.isEmpty() || !m_engine.load(QFileInfo(path).filesystemFilePath(), crossfadeMs)) {
@@ -629,6 +634,78 @@ void PlayerController::pause()
     stopClock();
     saveSession();
     setPlaying(false);
+}
+
+QList<QUrl> PlayerController::upNext() const
+{
+    QList<QUrl> urls;
+    for (int i = m_orderPosition + 1; i < m_order.size(); ++i)
+        urls.append(QUrl::fromLocalFile(m_queue.at(m_order.at(i))));
+    return urls;
+}
+
+void PlayerController::enqueue(const QList<QUrl> &fileUrls, bool atEnd)
+{
+    if (fileUrls.isEmpty())
+        return;
+    if (m_order.isEmpty()) { // nothing playing: becomes the queue
+        playQueue(fileUrls, 0);
+        return;
+    }
+    // Added files get new queue indices; the order (what plays when) decides where they go.
+    int at = atEnd ? int(m_order.size()) : m_orderPosition + 1;
+    for (const QUrl &url : fileUrls) {
+        m_queue.append(url.toLocalFile());
+        m_order.insert(at++, int(m_queue.size()) - 1);
+    }
+    m_engine.cancelQueued(); // the gapless next track may have changed
+    m_queueTried = false;
+    emit queueChanged();
+}
+
+void PlayerController::moveUpNext(int from, int to)
+{
+    const int base = m_orderPosition + 1;
+    const int count = int(m_order.size()) - base;
+    if (from < 0 || from >= count || to < 0 || to >= count || from == to)
+        return;
+    m_order.move(base + from, base + to);
+    m_engine.cancelQueued();
+    m_queueTried = false;
+    emit queueChanged();
+}
+
+void PlayerController::removeUpNext(int position)
+{
+    const int at = m_orderPosition + 1 + position;
+    if (position < 0 || at >= m_order.size())
+        return;
+    const int removed = m_order.takeAt(at);
+    m_queue.removeAt(removed); // gone for good, also from a later rebuildOrder (shuffle toggled)
+    for (int &index : m_order)
+        if (index > removed)
+            --index;
+    m_engine.cancelQueued();
+    m_queueTried = false;
+    emit queueChanged();
+}
+
+void PlayerController::clearUpNext()
+{
+    const int from = m_orderPosition + 1;
+    if (from <= 0 || from >= m_order.size())
+        return;
+    QueueOrder::dropFrom(m_order, m_queue, from);
+    m_engine.cancelQueued();
+    m_queueTried = false;
+    emit queueChanged();
+}
+
+void PlayerController::playUpNext(int position)
+{
+    const int at = m_orderPosition + 1 + position;
+    if (position >= 0 && at < m_order.size())
+        playAt(at);
 }
 
 void PlayerController::next()

@@ -30,6 +30,16 @@ CompactMenu {
     }
 
     CompactMenuItem {
+        text: qsTr("Play next")
+        onTriggered: PlayerController.enqueue(root.urls, false)
+    }
+
+    CompactMenuItem {
+        text: qsTr("Add to queue")
+        onTriggered: PlayerController.enqueue(root.urls, true)
+    }
+
+    CompactMenuItem {
         // Not while that album's page is already open.
         visible: !root.albumOpen
         height: visible ? implicitHeight : 0

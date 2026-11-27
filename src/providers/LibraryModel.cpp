@@ -185,7 +185,8 @@ void LibraryModel::applyFilter()
         const Track &track = m_tracks.at(i);
         if (m_filter.isEmpty() || track.title.contains(m_filter, Qt::CaseInsensitive)
             || track.artist.contains(m_filter, Qt::CaseInsensitive)
-            || track.album.contains(m_filter, Qt::CaseInsensitive))
+            || track.album.contains(m_filter, Qt::CaseInsensitive)
+            || track.composer.contains(m_filter, Qt::CaseInsensitive))
             m_rows.append(i);
     }
     // m_tracks is in artist order; every other order falls back to it (lower index first).

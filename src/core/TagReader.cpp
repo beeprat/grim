@@ -42,8 +42,13 @@ Track read(const QString &filePath)
             track.genre = toQString(tag->genre());
             track.trackNumber = static_cast<int>(tag->track());
         }
-        // Disc number is not in the basic Tag interface; "2/3" means disc 2 of 3.
-        const TagLib::StringList discs = file.properties()["DISCNUMBER"];
+        // Disc number and composer are not in the basic Tag interface; "2/3" means disc 2 of 3.
+        const TagLib::PropertyMap properties = file.properties();
+        QStringList composers;
+        for (const TagLib::String &name : properties["COMPOSER"])
+            composers.append(toQString(name));
+        track.composer = composers.join(u", "_s);
+        const TagLib::StringList discs = properties["DISCNUMBER"];
         if (!discs.isEmpty())
             track.discNumber = toQString(discs.front()).section(u'/', 0, 0).toInt();
         if (const TagLib::AudioProperties *properties = file.audioProperties())

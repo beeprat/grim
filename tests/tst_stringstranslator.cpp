@@ -36,19 +36,6 @@ private slots:
         QCOMPARE(strings.size(), 5);
     }
 
-    void templateRoundTrips()
-    {
-        const QStringList sources{u"Settings"_s, u"Say \"hi\""_s, u"Back\\slash"_s};
-        const QString text = StringsTranslator::makeTemplate(sources, {{u"Settings"_s, u"Podesavanja"_s}});
-        QVERIFY(text.contains(u"\"Settings\" = \"Podesavanja\";"_s));
-        QVERIFY(text.contains(u"\"Say \\\"hi\\\"\" = \"Say \\\"hi\\\"\";"_s));
-
-        const auto parsed = StringsTranslator::parse(text);
-        QCOMPARE(parsed.value(u"Settings"_s), u"Podesavanja"_s);
-        QCOMPARE(parsed.value(u"Say \"hi\""_s), u"Say \"hi\""_s);
-        QCOMPARE(parsed.value(u"Back\\slash"_s), u"Back\\slash"_s);
-    }
-
     void translatesThroughQt()
     {
         QTemporaryDir dir;

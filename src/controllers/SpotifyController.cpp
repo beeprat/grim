@@ -451,8 +451,12 @@ void SpotifyController::onTransfers(const QList<SlskdDownload> &downloads)
             if (download.state.contains(u"Succeeded"_s)) {
                 item.deadline = QDateTime::currentMSecsSinceEpoch() + kAddingTimeoutMs;
                 m_downloads->update(row, PlaylistDownloadsModel::Adding, tr("Adding to the library…"));
+            } else if (download.state.contains(u"Cancelled"_s)) {
+                // Cancelled by the user (grim's own cancels move the row on first): stop, no other copy.
+                m_downloads->update(row, PlaylistDownloadsModel::Failed, tr("Cancelled"));
+                checkFinished();
             } else if (Slskd::isTransferFinished(download.state)) {
-                queueNext(row); // errored, rejected, timed out or cancelled: the next result
+                queueNext(row); // errored, rejected or timed out: the next result
             } else if (download.state.contains(u"InProgress"_s) && download.size > 0) {
                 item.fraction = double(download.bytesTransferred) / download.size;
                 m_downloads->update(row, PlaylistDownloadsModel::Downloading,

@@ -23,6 +23,8 @@ namespace {
 const auto kLibraryFolderKey = "library/folder"_L1;
 const auto kMinimizeToTrayKey = "window/minimizeToTray"_L1;
 const auto kLanguageKey = "ui/language"_L1;
+// Translations built into the app (resources/translations).
+const auto kTranslationsFolder = ":/translations"_L1;
 const auto kOnlineLyricsKey = "lyrics/fetchOnline"_L1;
 const auto kCrossfadeKey = "playback/crossfadeSeconds"_L1;
 constexpr double kMaxCrossfadeSeconds = 12;
@@ -31,18 +33,6 @@ constexpr double kMaxCrossfadeSeconds = 12;
 double roundedCrossfade(double seconds)
 {
     return std::round(std::clamp(seconds, 0.0, kMaxCrossfadeSeconds) * 10) / 10;
-}
-
-// Every qsTr/tr text in the app, collected at build time (cmake/ExtractUiStrings.cmake).
-QStringList uiStrings()
-{
-    QFile file(u":/ui_strings.txt"_s);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return {};
-    QStringList strings;
-    for (const QString &line : QString::fromUtf8(file.readAll()).split(u'\n', Qt::SkipEmptyParts))
-        strings.append(StringsTranslator::unescape(line));
-    return strings;
 }
 
 } // namespace
@@ -61,8 +51,7 @@ SettingsController::SettingsController(QObject *parent)
     m_onlineLyrics = settings.value(kOnlineLyricsKey, true).toBool();
     m_crossfadeSeconds = roundedCrossfade(settings.value(kCrossfadeKey, 0).toDouble()); // older versions stored whole seconds
 
-    QDir().mkpath(translationsFolder());
-    reloadLanguages();
+    loadLanguages();
 }
 
 SettingsController::~SettingsController()
@@ -207,15 +196,10 @@ QStringList SettingsController::languages() const
     return m_languages;
 }
 
-QString SettingsController::translationsFolder() const
-{
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + u"/translations"_s;
-}
-
-void SettingsController::reloadLanguages()
+void SettingsController::loadLanguages()
 {
     QStringList found;
-    for (const QFileInfo &file : QDir(translationsFolder()).entryInfoList({u"*.txt"_s}, QDir::Files, QDir::Name))
+    for (const QFileInfo &file : QDir(kTranslationsFolder).entryInfoList({u"*.txt"_s}, QDir::Files, QDir::Name))
         found.append(file.completeBaseName());
     if (found != m_languages) {
         m_languages = found;
@@ -230,45 +214,12 @@ void SettingsController::applyLanguage()
     m_translator.clear();
     if (!m_language.isEmpty()) {
         QString error;
-        if (m_translator.loadFile(QDir(translationsFolder()).filePath(m_language + u".txt"_s), &error))
+        if (m_translator.loadFile(QDir(kTranslationsFolder).filePath(m_language + u".txt"_s), &error))
             QCoreApplication::installTranslator(&m_translator);
         else
             qWarning().noquote() << "SettingsController: cannot load language" << m_language << error;
     }
     emit translationApplied();
-}
-
-QString SettingsController::createTranslation(const QString &name)
-{
-    // The name becomes a file name: drop characters Windows does not allow there.
-    static const QRegularExpression forbidden(uR"([<>:"/\\|?*\x00-\x1f])"_s);
-    const QString cleanName = QString(name).remove(forbidden).trimmed();
-    if (cleanName.isEmpty())
-        return {};
-
-    const QString path = QDir(translationsFolder()).filePath(cleanName + u".txt"_s);
-    // Updating an existing file keeps its translations; a new file has none.
-    const QHash<QString, QString> kept = StringsTranslator::parse([&] {
-        QFile old(path);
-        return old.open(QIODevice::ReadOnly | QIODevice::Text) ? QString::fromUtf8(old.readAll()) : QString();
-    }());
-
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        qWarning().noquote() << "SettingsController: cannot write" << path << file.errorString();
-        return {};
-    }
-    file.write(StringsTranslator::makeTemplate(uiStrings(), kept).toUtf8());
-    file.close();
-
-    reloadLanguages();
-    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
-    return path;
-}
-
-void SettingsController::openTranslationsFolder() const
-{
-    QDesktopServices::openUrl(QUrl::fromLocalFile(translationsFolder()));
 }
 
 void SettingsController::setMinimizeToTray(bool enabled)

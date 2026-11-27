@@ -19,20 +19,37 @@ Card {
     property var neverPlayed: []
     property int favoriteCount: 0
 
+    // Something the rows show changed while the page was hidden: reload when it is shown again
+    // (reloading on every show made opening Home lag).
+    property bool stale: true
+
+    // The New / Updated badge of each album tile, worked out once per reload instead of in every tile.
+    function withBadges(entries) {
+        const albums = LibraryController.albums
+        return entries.map(entry => {
+            const urls = albums.urlsOf(albums.rowForTrack(entry.url))
+            const isNew = LibraryController.unseenCount > 0 && LibraryController.anyUnseen(urls)
+            const badge = isNew ? qsTr("New") : LibraryController.updatedCount > 0 && LibraryController.anyUpdated(urls) ? qsTr("Updated") : ""
+            return Object.assign({badge: badge}, entry)
+        })
+    }
+
     function reload() {
-        if (!visible)
+        if (!visible) {
+            stale = true
             return
-        recentlyAdded = LibraryController.albums.recentlyAdded(rowLimit)
-        recentlyPlayed = StatsController.homeAlbums(true, rowLimit)
+        }
+        stale = false
+        recentlyAdded = withBadges(LibraryController.albums.recentlyAdded(rowLimit))
+        recentlyPlayed = withBadges(StatsController.homeAlbums(true, rowLimit))
         favorites = LibraryController.favoriteTracks(rowLimit)
-        mostPlayed = StatsController.homeAlbums(false, rowLimit)
-        topRated = LibraryController.albums.topRated(rowLimit)
+        mostPlayed = withBadges(StatsController.homeAlbums(false, rowLimit))
+        topRated = withBadges(LibraryController.albums.topRated(rowLimit))
         // shortcut: counts favorites by fetching them all; add a count API if libraries get huge.
         favoriteCount = LibraryController.favoriteTracks(1000000).length
         // shortcut: fetches every album for Never played; add a count/at(index) API if libraries get huge.
         const all = LibraryController.albums.recentlyAdded(1000000)
-        neverPlayed = StatsController.neverPlayed(all, rowLimit)
-        StatsController.refresh()
+        neverPlayed = withBadges(StatsController.neverPlayed(all, rowLimit))
     }
 
     function greeting() {
@@ -40,7 +57,13 @@ Card {
         return hour < 12 ? qsTr("Good morning!") : hour < 18 ? qsTr("Good afternoon!") : qsTr("Good evening!")
     }
 
-    onVisibleChanged: reload()
+    onVisibleChanged: {
+        if (visible) {
+            StatsController.refresh() // its totalsChanged marks the page stale if plays were added
+            if (stale)
+                reload()
+        }
+    }
     Component.onCompleted: reload()
     Connections {
         target: LibraryController.albums
@@ -49,6 +72,18 @@ Card {
     Connections {
         target: LibraryController
         function onMetaChanged() { page.reload() }
+        function onUnseenChanged() { page.reload() }
+    }
+    // refresh() always signals; only a change in listening time means new plays for the rows.
+    property real listenedSeen: -1
+    Connections {
+        target: StatsController
+        function onTotalsChanged() {
+            if (StatsController.totalListenedMs !== page.listenedSeen) {
+                page.listenedSeen = StatsController.totalListenedMs
+                page.reload()
+            }
+        }
     }
 
     // Number + label chip under the greeting.
@@ -120,7 +155,10 @@ Card {
             orientation: ListView.Horizontal
             spacing: 2
             clip: true
+            boundsBehavior: Flickable.StopAtBounds
             model: row.entries
+            // A refreshed list (a song changed) left the view offset; start it at the first tile again.
+            onModelChanged: Qt.callLater(positionViewAtBeginning)
 
             // The wheel over the left three quarters scrolls the row sideways (while it overflows); over the
             // right quarter it goes on to the page, which scrolls up and down.
@@ -194,16 +232,13 @@ Card {
                         Layout.bottomMargin: 6
                         source: tile.modelData.coverUrl
 
-                        // Album not opened since it was added (opening it in the Library marks it seen).
+                        // Album not opened since it was added (opening it in the Library marks it seen), or retagged.
                         Rectangle {
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: 6
-                            readonly property var urls: LibraryController.albums.urlsOf(
-                                                            LibraryController.albums.rowForTrack(tile.modelData.url))
-                            readonly property bool isNew: LibraryController.unseenCount > 0 && LibraryController.anyUnseen(urls)
 
-                            visible: !row.songs && (isNew || LibraryController.updatedCount > 0 && LibraryController.anyUpdated(urls))
+                            visible: !row.songs && !!tile.modelData.badge
                             width: newLabel.implicitWidth + 12
                             height: newLabel.implicitHeight + 4
                             radius: height / 2
@@ -213,7 +248,7 @@ Card {
                                 id: newLabel
 
                                 anchors.centerIn: parent
-                                text: parent.isNew ? qsTr("New") : qsTr("Updated")
+                                text: tile.modelData.badge || ""
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
                                 color: Theme.window

@@ -109,12 +109,13 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   the music folder, so a backup carries them to another machine. Read at start and on folder change (fills only what
   the DB lacks, never overwrites), rewritten 2 s after `metaChanged`/`playlistsChanged` and on quit. Audio files are
   never written. A song renamed or moved outside grim. loses its entry.
-- `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes.
+- `cache/library-index.bin` (`core/LibraryIndex`): bump `kVersion` when `Track` changes (`kOldestVersion` and later still load: tags re-read once, added dates kept).
 - `cache/covers` (`core/CoverCache`: one JPEG (q80) per cover picture + size, `refs/<sha1 of path+mtime+size>` names the picture; `.none` = no cover; a folder without `refs/` has old per-track thumbnails, deleted on start), `cache/artist-photos` (YouTube Music header banners via its web API, Deezer as fallback; the old square `cache/artists` is deleted on start),
   `cache/lyrics` (LRCLIB; `.none` retried after 7 days). Network failures are never cached. Safe to delete.
 - Key files (`core/KeyFile`, `key = value`, `#` comments): `lastfm.txt` (`api_key`, `shared_secret`), `discord.txt`
   (`application_id`, `imgur_client_id`; empty values fall back to `kDefaultApplicationId`/`kDefaultImgurClientId`).
-- `scrobble-queue.json`, `imgur-covers.json`, `translations/<Language>.txt` (`"English" = "Translated";`).
+- `scrobble-queue.json`, `imgur-covers.json`.
+- Languages: built-in only, `resources/translations/<Language>.txt` (`"English" = "Translated";`, `core/StringsTranslator`) bundled as `:/translations`; Settings lists them after English (`ui/language`). New `qsTr` texts need a line in each file.
 - QSettings: `player/volume|shuffle|repeat` and `player/last*` (queue, track, position) saved on quit and on
   `QGuiApplication::commitDataRequest` (Windows shutdown/logoff may kill the process before destructors run);
   `slskd/username|managedApiKey`, `slskd/downloadFormat`, `playback/crossfadeSeconds`, `library/*`,
@@ -158,7 +159,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
   unexpected exits retried 3 times. Login: `slskd/username`, password via `core/CredentialStore` (Credential Manager
   `grimPlayer/slskd-password`; Linux 0600 file). Settings → Soulseek is only that login; nothing runs until a
   username is set. Connecting to a slskd the user runs themselves was removed on request. The title bar's
-  start/stop button (`managedRunning`) is remembered in `slskd/stopped`; saving the login clears it.
+  start/stop button (`managedRunning`) starts it; it never starts at launch (saves RAM). Saving the login or a Spotify download starts it.
 - slskd (`core/SlskdClient`, API v0, `X-API-Key`, endpoints follow llehouerou/waves `client.go`): callbacks only on
   success, every failure once via `errorOccurred`. Status (`GET application`) is checked only at startup, after a
   failure and on click; no background polling. The API reports no local paths: find downloads by name under
@@ -247,7 +248,7 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - Menus: `CompactMenu`/`CompactMenuItem`/`CompactComboBox` with `PopupBackground`. One `TrackContextMenu` in `Main`,
   opened via `ApplicationWindow.window.openTrackMenu([urls])`.
 - Pages: 0 Library, 1 Playlists, 2 Statistics, 3 Soulseek, 4 Settings, 5 Home (start page, first rail button).
-  Pages 1–4 are `LazyPage` loaders. Home (`HomePage.qml`): greeting, "grim <version>" (`Qt.application.version`), count chips; album tiles show the "New" badge until opened; right-click opens the shared track menu, then rows (a divider line above each) Recently added (`AlbumsModel::recentlyAdded`, newest
+  Pages 1–4 are `LazyPage` loaders (built async 2 s after start). Home reloads only when its data changed. Home (`HomePage.qml`): greeting, "grim <version>" (`Qt.application.version`), count chips; album tiles show the "New" badge until opened; right-click opens the shared track menu, then rows (a divider line above each) Recently added (`AlbumsModel::recentlyAdded`, newest
   `Track::addedMs` first: when a scan or import first saw the file, kept in the library index; also the "Recently added" sort), Recently played / Most played (`StatsController::homeAlbums`), Favorites
   (`LibraryController::favoriteTracks`), Top rated (`AlbumsModel::topRated`), Never played (`StatsController::neverPlayed`: albums with no listening at
   all); a tile opens it in the Library, right-click opens the track menu (song, or the album's tracks).
@@ -264,6 +265,9 @@ PATH. Installer: `makensis installer\grim.nsi` (per-user, `%LOCALAPPDATA%\Progra
 - "Updated" badge: known files whose size or mtime changed in a scan (`ScanResult::updated`) go into
   `LibraryController`'s updated set (`library/updated`, never for unseen files); album tiles, Home tiles and track rows
   show it. Opening/playing marks them seen; the Library's Albums/Tracks buttons clear all (`clearUpdated`).
+- Play queue (`QueuePanel.qml`, now-playing queue button): opens left of the now-playing card; now playing on top,
+  then the first 200 of "Up next" (count and total over all, `LibraryController::durationOf`). Drag by the number
+  (the list scrolls at its edges), Clear = `PlayerController::clearUpNext` (index bookkeeping in `core/QueueOrder.h`).
 - Album page: clicking the cover opens it full size (`coverViewer` popup). Track menu "Use album cover" (shown only
   when a selected song's cover differs) writes the album's most common cover (`DownloadTagger::majorityCover`).
 - Panel grid (`Main.qml`): empty `layout/grid` = classic pixel layout; rects are [col, row, w, h, pxHeight, pxWidth]

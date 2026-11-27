@@ -17,6 +17,7 @@ struct Entry
     Track track;
     qint64 size = 0;
     qint64 modifiedMs = 0; // last modification, ms since epoch
+    bool tagsStale = false; // from an older index without every Track field: re-read, not "updated"
 };
 
 struct ScanResult

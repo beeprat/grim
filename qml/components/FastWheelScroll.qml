@@ -6,8 +6,8 @@ WheelHandler {
     id: handler
 
     required property Flickable flickable
-    // Pixels per wheel unit; one notch is 120 units, so 2 = 240 px per notch.
-    property real speed: 2
+    // Pixels per wheel unit; one notch is 120 units, so 1.6 = 192 px per notch.
+    property real speed: 1.6
 
     target: null
     acceptedModifiers: Qt.NoModifier // Ctrl + wheel stays the UI zoom
@@ -26,7 +26,7 @@ WheelHandler {
     property NumberAnimation scroll: NumberAnimation {
         target: handler.flickable
         property: "contentY"
-        duration: 180
+        duration: 220
         easing.type: Easing.OutCubic
     }
 }

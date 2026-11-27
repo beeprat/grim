@@ -72,11 +72,19 @@ public:
     Q_INVOKABLE void toggleFavorite(const QUrl &fileUrl);
     // Home page row: favorite songs, latest first. [{title, artist, coverUrl, url}]
     Q_INVOKABLE QVariantList favoriteTracks(int limit) const;
+    // Same shape as favoriteTracks, for these files (the play queue), one entry per file (outside the library: its file name).
+    Q_INVOKABLE QVariantList tracksFor(const QList<QUrl> &fileUrls) const;
+    // Total length of these songs in ms (unknown songs count 0).
+    Q_INVOKABLE qint64 durationOf(const QList<QUrl> &fileUrls) const;
+    // Reads the library off the UI thread (covers come from the files), then libraryChecked().
+    Q_INVOKABLE void checkLibrary();
 
     int unseenCount() const;
     Q_INVOKABLE bool anyUnseen(const QList<QUrl> &fileUrls) const;
     int updatedCount() const;
     Q_INVOKABLE bool anyUpdated(const QList<QUrl> &fileUrls) const;
+    // Album grid badge for an AlbumsModel row: 0 none, 1 New, 2 Updated (one pass, no URLs).
+    Q_INVOKABLE int albumBadge(int row) const;
     // Clears every "Updated" badge (Library's Albums/Tracks buttons).
     Q_INVOKABLE void clearUpdated();
     Q_INVOKABLE void markSeen(const QList<QUrl> &fileUrls);
@@ -121,6 +129,9 @@ public:
 signals:
     // findCover() is done: how many songs got the cover (0: none found, or all already had one).
     void coverSearchFinished(int added);
+    // `missing`: [{album, artist, coverUrl, missing (e.g. "cover, year"), urls}];
+    // `duplicates`: [{title, artist, files: [{url, folder}]}].
+    void libraryChecked(const QVariantList &missing, const QVariantList &duplicates);
     void scanningChanged();
     void filterChanged();
     void artistFilterChanged();

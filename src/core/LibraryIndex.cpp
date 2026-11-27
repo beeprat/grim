@@ -17,13 +17,16 @@ namespace LibraryIndex {
 namespace {
 
 constexpr quint32 kMagic = 0x47524958; // "GRIX"
-// Bump when Entry or Track gains or changes a field: older index files are then ignored.
-constexpr quint32 kVersion = 3;
+// Bump when Entry or Track gains or changes a field. v3 (no composer) still loads: its tags are re-read
+// once, keeping added dates and without "Updated" badges. Anything older is ignored.
+constexpr quint32 kVersion = 4;
+constexpr quint32 kOldestVersion = 3;
+quint32 s_readVersion = kVersion; // shortcut: load() runs on one thread at a time; pass it down if that changes
 
 QDataStream &operator<<(QDataStream &out, const Entry &entry)
 {
     const Track &t = entry.track;
-    return out << t.path << t.title << t.artist << t.album << t.durationMs << qint32(t.year) << t.genre
+    return out << t.path << t.title << t.artist << t.album << t.durationMs << qint32(t.year) << t.genre << t.composer
                << qint32(t.trackNumber) << qint32(t.discNumber) << entry.size << entry.modifiedMs << t.addedMs << t.changedMs;
 }
 
@@ -33,7 +36,12 @@ QDataStream &operator>>(QDataStream &in, Entry &entry)
     qint32 year = 0;
     qint32 trackNumber = 0;
     qint32 discNumber = 0;
-    in >> t.path >> t.title >> t.artist >> t.album >> t.durationMs >> year >> t.genre >> trackNumber
+    in >> t.path >> t.title >> t.artist >> t.album >> t.durationMs >> year >> t.genre;
+    if (s_readVersion >= 4)
+        in >> t.composer;
+    else
+        entry.tagsStale = true;
+    in >> trackNumber
         >> discNumber >> entry.size >> entry.modifiedMs >> t.addedMs >> t.changedMs;
     t.year = year;
     t.trackNumber = trackNumber;
@@ -55,10 +63,11 @@ Known load(const QString &indexFile, const QString &folder)
     QString indexedFolder;
     quint32 count = 0;
     in >> magic >> version >> indexedFolder >> count;
-    if (in.status() != QDataStream::Ok || magic != kMagic || version != kVersion
+    if (in.status() != QDataStream::Ok || magic != kMagic || version < kOldestVersion || version > kVersion
         || QDir::cleanPath(indexedFolder).compare(QDir::cleanPath(folder), Qt::CaseInsensitive) != 0)
         return {};
 
+    s_readVersion = version;
     Known known;
     known.reserve(count);
     for (quint32 i = 0; i < count; ++i) {
@@ -108,7 +117,7 @@ ScanResult scan(const QString &folder, const Known &known, Track (*read)(const Q
         entry.modifiedMs = info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
         const auto cached = known.constFind(path.toLower());
         const bool same = cached != known.cend() && cached->size == entry.size && cached->modifiedMs == entry.modifiedMs;
-        if (reuseTags && same) {
+        if (reuseTags && same && !cached->tagsStale) {
             entry.track = cached->track;
             ++reused;
         } else {

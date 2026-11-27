@@ -15,6 +15,13 @@ Item {
     // Leaving the album page: Escape, or the mouse's back button anywhere on this page.
     // Grid scroll position when an album was opened, to come back to the same spot.
     property real gridScroll: 0
+    // Ctrl+F: the search field, text selected so typing replaces it.
+    function focusSearch() {
+        openAlbum = -1
+        searchField.forceActiveFocus()
+        searchField.selectAll()
+    }
+
     function goBack() {
         if (openAlbum >= 0) {
             openAlbum = -1
@@ -38,6 +45,7 @@ Item {
     property string openAlbumCover
     property int openAlbumYear: 0
     property var openAlbumTracks: []
+    readonly property string openAlbumGenre: (openAlbumTracks.find(track => track.genre !== "") || {genre: ""}).genre
     // The artist's other albums, under the tracks.
     property var openAlbumMoreBy: []
     // Average stars of the album's rated tracks, as the grid shows in rating sort (0 = none rated).
@@ -950,8 +958,11 @@ Item {
                     primary: title
                     secondary: page.albumSubtitle(artist, year, genre, rating)
                     artistName: artist
-                    isNew: LibraryController.unseenCount > 0 && LibraryController.anyUnseen(LibraryController.albums.urlsOf(index))
-                    isUpdated: LibraryController.updatedCount > 0 && LibraryController.anyUpdated(LibraryController.albums.urlsOf(index))
+                    // Counts in the binding so it re-evaluates when the sets change.
+                    readonly property int badge: LibraryController.unseenCount + LibraryController.updatedCount > 0
+                                                 ? LibraryController.albumBadge(index) : 0
+                    isNew: badge === 1
+                    isUpdated: badge === 2
                     onClicked: page.showAlbum(index)
                     onContextMenu: ApplicationWindow.window.openTrackMenu(LibraryController.albums.urlsOf(index), true)
                 }
@@ -1171,12 +1182,35 @@ Item {
 
                         }
 
-                        Label {
-                            text: (page.openAlbumTracks.length === 1 ? qsTr("1 track")
-                                                                     : qsTr("%1 tracks").arg(page.openAlbumTracks.length))
-                                  + (page.openAlbumYear > 0 ? "  ·  " + page.openAlbumYear : "")
-                              + (page.openAlbumRating > 0 ? "  ·  ★ " + page.openAlbumRating.toFixed(1) : "")
-                            opacity: 0.5
+                        // Tracks · year · genre (opens the genre's albums) · rating.
+                        Row {
+                            Label {
+                                text: (page.openAlbumTracks.length === 1 ? qsTr("1 track")
+                                                                         : qsTr("%1 tracks").arg(page.openAlbumTracks.length))
+                                      + (page.openAlbumYear > 0 ? "  ·  " + page.openAlbumYear : "")
+                                      + (page.openAlbumGenre !== "" ? "  ·  " : "")
+                                opacity: 0.5
+                            }
+                            Label {
+                                visible: page.openAlbumGenre !== ""
+                                text: page.openAlbumGenre
+                                font.underline: genreMouse.containsMouse
+                                opacity: genreMouse.containsMouse ? 0.9 : 0.5
+
+                                MouseArea {
+                                    id: genreMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: page.showGenre(page.openAlbumGenre.toLowerCase())
+                                }
+                            }
+                            Label {
+                                visible: page.openAlbumRating > 0
+                                text: "  ·  ★ " + page.openAlbumRating.toFixed(1)
+                                opacity: 0.5
+                            }
                         }
 
                         RowLayout {
@@ -1232,7 +1266,7 @@ Item {
                         width: ListView.view.width - 12
                         number: index + 1
                         primary: modelData.title
-                        secondary: modelData.artist
+                        secondary: modelData.composer || modelData.artist // composer; artist when the tag has none
                         flashing: index === page.flashTrack
                         trailing: modelData.durationMs > 0 ? page.formatTime(modelData.durationMs) : ""
                         trackUrl: modelData.url
@@ -1332,7 +1366,11 @@ Item {
         height: parent.height
         modal: true
         padding: 0
-        background: Rectangle { color: "#d0000000" }
+        // Only dims the page behind the cover.
+        background: Item {}
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.6) }
+        enter: null
+        exit: null
 
         Image {
             anchors.fill: parent

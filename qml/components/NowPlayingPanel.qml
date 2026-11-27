@@ -59,6 +59,8 @@ Card {
                 spacing: 0
 
                 Label {
+                    id: titleLabel
+
                     Layout.fillWidth: true
                     text: PlayerController.hasTrack ? PlayerController.title : qsTr("Nothing playing")
                     // Long titles get a second line before they are cut.
@@ -93,6 +95,8 @@ Card {
                 }
 
                 Label {
+                    id: artistLabel
+
                     Layout.fillWidth: true
                     visible: text !== ""
                     text: PlayerController.artist
@@ -122,7 +126,8 @@ Card {
                 // Compact: full-size tool buttons would make the stack much taller than the text.
                 HeartButton {
                     Layout.preferredWidth: 26
-                    Layout.preferredHeight: 26
+                    // As tall as the title's first line: centered beside it.
+                    Layout.preferredHeight: titleLabel.height / Math.max(1, titleLabel.lineCount)
                     padding: 0
                     topInset: 0
                     bottomInset: 0
@@ -133,7 +138,7 @@ Card {
 
                 IconButton {
                     Layout.preferredWidth: 26
-                    Layout.preferredHeight: 26
+                    Layout.preferredHeight: albumLabel.visible ? albumLabel.height : 20
                     padding: 0
                     topInset: 0
                     bottomInset: 0
@@ -143,6 +148,20 @@ Card {
                     tip: ApplicationWindow.window.lyricsVisible ? qsTr("Hide lyrics") : qsTr("Show lyrics")
                     active: ApplicationWindow.window.lyricsVisible
                     onClicked: ApplicationWindow.window.lyricsVisible = !ApplicationWindow.window.lyricsVisible
+                }
+
+                IconButton {
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: artistLabel.visible ? artistLabel.height : 20
+                    padding: 0
+                    topInset: 0
+                    bottomInset: 0
+                    background: Item {}
+                    iconName: "playlist"
+                    iconSize: 22 // its glyph is narrower than the others: matches them visually
+                    tip: qsTr("Up next")
+                    active: ApplicationWindow.window.queueOpen
+                    onClicked: ApplicationWindow.window.toggleQueue()
                 }
             }
         }

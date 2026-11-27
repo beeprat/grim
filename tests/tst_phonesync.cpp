@@ -37,17 +37,22 @@ private slots:
         write(phone.filePath(u"A/1. X (1970)/changed.m4a"_s), "old");
         write(phone.filePath(u"B/1. Gone (1980)/gone.mp3"_s), "gone");
         write(phone.filePath(u"add-files-here.txt"_s), "the app's own"); // never touched
+        write(phone.filePath(u"A/1. X (1970)/Folder.jpg"_s), "small"); // MiniMoon prefers it: removed
+        write(phone.filePath(u"A/1. X (1970)/AlbumArtSmall.jpg"_s), "smaller");
+        write(phone.filePath(u"A/1. X (1970)/X.png"_s), "kept");
 
         const PhoneSync::Plan plan = PhoneSync::plan(library.path(), phone.path());
         QCOMPARE(plan.added, QStringList{u"A/1. X (1970)/new.m4a"_s});
         QCOMPARE(plan.updated, QStringList{u"A/1. X (1970)/changed.m4a"_s});
-        QCOMPARE(plan.remove, QStringList{u"B/1. Gone (1980)/gone.mp3"_s});
+        QCOMPARE(plan.remove, (QStringList{u"A/1. X (1970)/AlbumArtSmall.jpg"_s, u"A/1. X (1970)/Folder.jpg"_s,
+                                           u"B/1. Gone (1980)/gone.mp3"_s}));
         QCOMPARE(plan.copyBytes, qint64(11));
 
         std::atomic_bool cancel{false};
         int calls = 0;
         QVERIFY(PhoneSync::apply(plan, library.path(), phone.path(), [&](int, int) { ++calls; }, cancel).isEmpty());
-        QCOMPARE(calls, 3);
+        QCOMPARE(calls, 5);
+        QVERIFY(QFile::exists(phone.filePath(u"A/1. X (1970)/X.png"_s)));
         QVERIFY(!QDir(phone.filePath(u"B"_s)).exists()); // emptied folders removed
         QVERIFY(QFile::exists(phone.filePath(u"add-files-here.txt"_s)));
         QVERIFY(!QFile::exists(phone.filePath(u"A/1. X (1970)/Folder.jpg"_s)));

@@ -62,6 +62,8 @@ public:
     Q_INVOKABLE QVariantList tracksOf(int row) const;
     // For PlayerController.playQueue().
     Q_INVOKABLE QList<QUrl> urlsOf(int row) const;
+    // The album's file paths, for C++ callers (no URL round trip).
+    QStringList pathsOf(int row) const;
     // "More by" on the album page: this artist's other albums, whatever the filters, newest first:
     // [{title, year, coverUrl, url}] (`url`: the album's first track, for openAlbumOf).
     Q_INVOKABLE QVariantList albumsBy(const QString &artist, const QString &exceptTitle) const;

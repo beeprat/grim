@@ -280,6 +280,11 @@ Item {
                             text: qsTr("Change…")
                             onClicked: folderDialog.open()
                         }
+
+                        Button {
+                            text: qsTr("Check library…")
+                            onClicked: ApplicationWindow.window.checkLibrary()
+                        }
                     }
 
                     Hint {
@@ -409,46 +414,6 @@ Item {
                                           ? 0 : SettingsController.languages.indexOf(SettingsController.language) + 1
                             onActivated: (index) => SettingsController.language = index === 0 ? "" : SettingsController.languages[index - 1]
                         }
-
-                        Button {
-                            text: qsTr("Reload")
-                            flat: true
-                            onClicked: SettingsController.reloadLanguages()
-                        }
-
-                        Button {
-                            text: qsTr("Open folder")
-                            flat: true
-                            onClicked: SettingsController.openTranslationsFolder()
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        TextField {
-                            id: newLanguageField
-
-                            Layout.preferredWidth: 220
-                            placeholderText: qsTr("Language name, e.g. Bosanski")
-                            onAccepted: createLanguageButton.clicked()
-                        }
-
-                        Button {
-                            id: createLanguageButton
-
-                            text: qsTr("Create translation file")
-                            enabled: newLanguageField.text.trim() !== ""
-                            onClicked: {
-                                if (SettingsController.createTranslation(newLanguageField.text) !== "")
-                                    newLanguageField.text = ""
-                            }
-                        }
-                    }
-
-                    Hint {
-                        text: qsTr("Creates a text file with every text in the app, one per line: \"Settings\" = \"Settings\";  Replace the right side with your translation, save, press Reload and pick the language above. Using an existing name updates that file with new texts and keeps your translations.")
                     }
                 }
 
@@ -786,7 +751,7 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     Layout.topMargin: -8 // right under the last card (the column spaces cards 12 px apart)
-                    text: "grim. - GRIMSIXSTAR, šarić. - 2026. - " + Qt.application.version // the CMake project version
+                    text: "grim. - GRIMSIXSTAR, beeprat. - 2026. - " + Qt.application.version // the CMake project version
                     opacity: 0.35
                     font.pixelSize: 11
                 }

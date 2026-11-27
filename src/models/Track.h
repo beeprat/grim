@@ -12,6 +12,7 @@ struct Track
     qint64 durationMs = 0; // 0 = unknown
     int year = 0;          // 0 = unknown
     QString genre;
+    QString composer;      // COMPOSER tag(s), ", "-joined
     int trackNumber = 0;   // 0 = unknown
     int discNumber = 0;    // 0 = unknown (single-disc albums often leave it out)
     qint64 addedMs = 0;    // when grim first saw the file in the library, ms since epoch; 0 = unknown

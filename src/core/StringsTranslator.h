@@ -25,11 +25,7 @@ public:
 
     // Parses file text into English -> translated. Malformed lines are skipped.
     static QHash<QString, QString> parse(const QString &text);
-    // A complete file for every source string: existing translations are kept, the rest
-    // default to the English text so the file works before anything is translated.
-    static QString makeTemplate(const QStringList &sourceStrings, const QHash<QString, QString> &existing = {});
-    // \" \\ \n escapes, as used in the file (and in the source code the strings come from).
-    static QString escape(const QString &text);
+    // Undoes the file's \" \\ \n escapes (as in the source code the strings come from).
     static QString unescape(const QString &text);
 
 private:

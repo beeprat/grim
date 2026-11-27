@@ -22,9 +22,8 @@ class SettingsController : public QObject
     Q_PROPERTY(bool minimizeToTray READ minimizeToTray WRITE setMinimizeToTray NOTIFY minimizeToTrayChanged FINAL)
     // Translation file name without ".txt"; empty = English (the texts in the code).
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
-    // Translation files found in translationsFolder.
+    // Built-in translations (resources/translations).
     Q_PROPERTY(QStringList languages READ languages NOTIFY languagesChanged FINAL)
-    Q_PROPERTY(QString translationsFolder READ translationsFolder CONSTANT FINAL)
     // Look up lyrics on lrclib.net for songs without them (sends artist, title, album, length).
     Q_PROPERTY(bool onlineLyrics READ onlineLyrics WRITE setOnlineLyrics NOTIFY onlineLyricsChanged FINAL)
     // Seconds the end of a track overlaps the next one; 0 = off.
@@ -60,15 +59,6 @@ public:
     QString language() const;
     void setLanguage(const QString &language);
     QStringList languages() const;
-    QString translationsFolder() const;
-
-    // Writes "<name>.txt" with every text of the app, ready to translate, and opens it.
-    // An existing file is updated: its translations are kept and new texts are added.
-    // Returns the file path, or empty if the name is unusable.
-    Q_INVOKABLE QString createTranslation(const QString &name);
-    Q_INVOKABLE void openTranslationsFolder() const;
-    // Re-reads the folder (files added or edited by hand) and reloads the current language.
-    Q_INVOKABLE void reloadLanguages();
 
     qint64 cacheBytes() const;
     Q_INVOKABLE void refreshCacheSize();
@@ -95,6 +85,7 @@ signals:
 private:
     static inline SettingsController *s_instance = nullptr;
 
+    void loadLanguages();
     void applyLanguage();
 
     QString m_libraryFolder;

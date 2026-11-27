@@ -1,2 +1,2 @@
-<!-- Material Design icon "notes", Apache License 2.0 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#ffffff" d="M3 18h12v-2H3v2zM3 6v2h18V6H3zm0 7h18v-2H3v2z"/></svg>
+<!-- Handheld microphone (drawn for grim. in the filled Material style of the other icons) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="#ffffff" d="M10 9a5 5 0 1 0 10 0a5 5 0 1 0-10 0zM9.2 11.12 12.88 14.8 11.75 15.93 8.07 12.25zM8.15 13.17 10.83 15.85 5.88 19.68 4.32 18.12z"/></svg>

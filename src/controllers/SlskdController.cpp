@@ -68,7 +68,6 @@ QString songKey(const QString &remotePath)
 }
 const auto kUsernameKey = "slskd/username"_L1;
 const auto kManagedApiKeyKey = "slskd/managedApiKey"_L1;
-const auto kStoppedKey = "slskd/stopped"_L1;
 const auto kPasswordName = "slskd-password"_L1; // CredentialStore
 const auto kWebUsernameKey = "slskd/webUsername"_L1;
 const auto kWebPasswordName = "slskd-web-password"_L1; // CredentialStore
@@ -98,7 +97,7 @@ SlskdController::SlskdController(SettingsController &settings, QObject *parent)
         m_downloadFormat = u"m4a"_s;
     m_converter->setFormat(m_downloadFormat);
     m_username = stored.value(kUsernameKey).toString();
-    m_stopped = stored.value(kStoppedKey, false).toBool();
+    m_stopped = true; // never started at launch (saves RAM): the title bar button or a Spotify download starts it
     m_webUsername = stored.value(kWebUsernameKey).toString();
     if (!m_webUsername.isEmpty())
         m_runner->setWebLogin(m_webUsername, CredentialStore::read(kWebPasswordName));
@@ -198,7 +197,6 @@ void SlskdController::useManaged(const QString &username, const QString &passwor
     m_stopped = false; // saving the login means "start it"
     QSettings settings;
     settings.setValue(kUsernameKey, m_username);
-    settings.setValue(kStoppedKey, false);
     setErrorText({});
     emit settingsChanged();
     // slskd reads the login at start: (re)start it, or download it first.
@@ -229,7 +227,6 @@ void SlskdController::setManagedRunning(bool running)
     if (running == managedRunning() || !managed())
         return;
     m_stopped = !running;
-    QSettings().setValue(kStoppedKey, m_stopped);
     if (running) {
         restartManaged();
     } else {

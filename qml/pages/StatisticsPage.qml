@@ -443,12 +443,13 @@ Item {
 
                         Repeater {
                             model: StatsController.genreShares
-                            delegate: RowLayout {
+                            // An Item around the row: a MouseArea inside the RowLayout would become a layout cell.
+                            delegate: Item {
                                 id: legendRow
                                 required property var modelData
                                 required property int index
                                 Layout.fillWidth: true
-                                spacing: 8
+                                implicitHeight: legendCells.implicitHeight
                                 opacity: legendMouse.containsMouse ? 0.7 : 1
                                 onOpacityChanged: pie.hovered = legendMouse.containsMouse ? index : (pie.hovered === index ? -1 : pie.hovered)
 
@@ -460,12 +461,17 @@ Item {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: page.openShare(legendRow.modelData)
                                 }
-                                Rectangle { width: 10; height: 10; radius: 5; color: page.sliceColor(index) }
-                                Label { Layout.fillWidth: true; text: modelData.genre; elide: Text.ElideRight; font.pixelSize: 12 }
-                                Label {
-                                    font.pixelSize: 12
-                                    text: qsTr("%1 %").arg(Math.round(modelData.ms * 100 / Math.max(1, page.genreTotalMs)))
-                                    opacity: 0.6
+                                RowLayout {
+                                    id: legendCells
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Rectangle { width: 10; height: 10; radius: 5; color: page.sliceColor(legendRow.index) }
+                                    Label { Layout.fillWidth: true; text: legendRow.modelData.genre; elide: Text.ElideRight; font.pixelSize: 12 }
+                                    Label {
+                                        font.pixelSize: 12
+                                        text: qsTr("%1 %").arg(Math.round(legendRow.modelData.ms * 100 / Math.max(1, page.genreTotalMs)))
+                                        opacity: 0.6
+                                    }
                                 }
                             }
                         }

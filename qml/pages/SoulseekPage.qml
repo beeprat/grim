@@ -529,9 +529,10 @@ Item {
                         }
 
                         // Finished = succeeded, failed or cancelled; downloads still running stay.
-                        Button {
-                            text: qsTr("Clear downloads")
-                            flat: true
+                        ToolButton {
+                            text: "✕"
+                            Accessible.name: qsTr("Clear downloads")
+                            opacity: 0.7
                             enabled: downloadsList.count > 0 && page.online
                             onClicked: SlskdController.clearFinishedDownloads()
                         }

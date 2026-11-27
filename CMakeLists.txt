@@ -125,6 +125,8 @@ add_library(musicplayer_core STATIC
     src/core/WallpaperBlur.cpp
     src/core/PhoneSync.h
     src/core/PhoneSync.cpp
+    src/core/LibraryCheck.h
+    src/core/LibraryCheck.cpp
     src/core/TagEditor.h
     src/core/TagEditor.cpp
     src/audio/AudioEngine.h
@@ -241,6 +243,8 @@ qt_add_qml_module(MusicPlayer
         qml/components/IconButton.qml
         qml/components/NowPlayingPanel.qml
         qml/components/LyricsPanel.qml
+        qml/components/QueuePanel.qml
+        qml/components/LibraryCheckDialog.qml
         qml/components/PlaybackControls.qml
         qml/components/RankedList.qml
         qml/components/RatingCard.qml
@@ -309,23 +313,11 @@ else()
     install(TARGETS MusicPlayer RUNTIME DESTINATION bin)
 endif()
 
-# Every qsTr/tr text, collected at build time, embedded as :/ui_strings.txt. Settings writes it
-# out as a translation template. Regenerated whenever a QML or C++ source changes.
-file(GLOB_RECURSE MUSICPLAYER_UI_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/qml/*.qml ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
-list(JOIN MUSICPLAYER_UI_SOURCES "\n" MUSICPLAYER_UI_SOURCE_LIST)
-file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ui_sources.txt CONTENT "${MUSICPLAYER_UI_SOURCE_LIST}\n")
-add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ui_strings.txt
-    COMMAND ${CMAKE_COMMAND} -DOUT=${CMAKE_CURRENT_BINARY_DIR}/ui_strings.txt
-            -DSOURCE_LIST=${CMAKE_CURRENT_BINARY_DIR}/ui_sources.txt
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ExtractUiStrings.cmake
-    DEPENDS ${MUSICPLAYER_UI_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ExtractUiStrings.cmake
-    COMMENT "Collecting UI strings for translation templates")
-qt_add_resources(MusicPlayer "ui_strings"
+# Built-in translations, "English" = "Translated"; lines (core/StringsTranslator), listed in Settings.
+qt_add_resources(MusicPlayer "translations"
     PREFIX "/"
-    BASE ${CMAKE_CURRENT_BINARY_DIR}
-    FILES ${CMAKE_CURRENT_BINARY_DIR}/ui_strings.txt)
+    BASE ${CMAKE_CURRENT_SOURCE_DIR}/resources
+    FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/translations/Srpski.txt)
 # windows.h (MediaKeys) otherwise defines min/max macros.
 # GRIM_VERSION: compared with the latest GitHub release at startup (UpdateController).
 target_compile_definitions(MusicPlayer PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN GRIM_VERSION="${PROJECT_VERSION}")
@@ -379,8 +371,16 @@ add_test(NAME tst_tageditor COMMAND tst_tageditor)
 qt_add_executable(tst_phonesync tests/tst_phonesync.cpp)
 target_link_libraries(tst_phonesync PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
 add_test(NAME tst_phonesync COMMAND tst_phonesync)
+
+qt_add_executable(tst_librarycheck tests/tst_librarycheck.cpp)
+target_link_libraries(tst_librarycheck PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_librarycheck COMMAND tst_librarycheck)
+
+qt_add_executable(tst_queueorder tests/tst_queueorder.cpp)
+target_link_libraries(tst_queueorder PRIVATE musicplayer_core Qt6::Test musicplayer_warnings)
+add_test(NAME tst_queueorder COMMAND tst_queueorder)
 # Qt's DLLs (Qt6Test.dll and the rest) for tests run from the build folder.
-set_tests_properties(tst_trackpicker tst_spotifymatch tst_equalizer tst_tageditor tst_phonesync PROPERTIES
+set_tests_properties(tst_trackpicker tst_spotifymatch tst_equalizer tst_tageditor tst_phonesync tst_librarycheck tst_queueorder PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 qt_add_executable(tst_statsdatabase tests/tst_statsdatabase.cpp)
